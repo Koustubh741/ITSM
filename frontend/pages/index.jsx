@@ -8,8 +8,18 @@ import PieChart from '@/components/PieChart'
 import TrendLineChart from '@/components/TrendLineChart'
 import AlertsFeed from '@/components/AlertsFeed'
 import WorkflowVisualizer from '@/components/WorkflowVisualizer'
+import { useRole } from '@/contexts/RoleContext'
+import AssetOwnerDashboard from '@/components/dashboards/AssetOwnerDashboard'
+import CustodianDashboard from '@/components/dashboards/CustodianDashboard'
+import InventoryManagerDashboard from '@/components/dashboards/InventoryManagerDashboard'
+import ProcurementManagerDashboard from '@/components/dashboards/ProcurementManagerDashboard'
+import ITSupportDashboard from '@/components/dashboards/ITSupportDashboard'
+import AuditOfficerDashboard from '@/components/dashboards/AuditOfficerDashboard'
+import FinanceDashboard from '@/components/dashboards/FinanceDashboard'
+import EndUserDashboard from '@/components/dashboards/EndUserDashboard'
 
 export default function Dashboard() {
+    const { currentRole } = useRole();
     const [stats, setStats] = useState(null)
     const [recentAssets, setRecentAssets] = useState([])
     const [allAssets, setAllAssets] = useState([])
@@ -82,6 +92,17 @@ export default function Dashboard() {
         </div>
     )
 
+    // Role-Based Rendering
+    if (currentRole.label === 'Asset Owner') return <AssetOwnerDashboard />
+    if (currentRole.label === 'Custodian') return <CustodianDashboard />
+    if (currentRole.label === 'Inventory Manager') return <InventoryManagerDashboard />
+    if (currentRole.label === 'Procurement Manager') return <ProcurementManagerDashboard />
+    if (currentRole.label === 'IT Support') return <ITSupportDashboard />
+    if (currentRole.label === 'Audit Officer') return <AuditOfficerDashboard />
+    if (currentRole.label === 'Finance') return <FinanceDashboard />
+    if (currentRole.label === 'End User') return <EndUserDashboard />
+
+    // Default: System Admin & Asset Manager (Existing Dashboard)
     const StatCard = ({ title, value, subtext, icon: Icon, colorClass, gradient, trend }) => (
         <div className={`glass-card p-6 relative overflow-hidden group cursor-pointer hover:border-blue-500/30 hover:bg-white/5 transition-all duration-300`}>
             <div className={`absolute -right-6 -top-6 p-8 rounded-full ${gradient} opacity-5 group-hover:opacity-10 transition-all duration-500 blur-2xl`}></div>
@@ -209,7 +230,7 @@ export default function Dashboard() {
                 <Link href="/assets">
                     <StatCard
                         title="Asset Value"
-                        value="$1,245,000"
+                        value={`₹${(stats?.total_value || 0).toLocaleString()}`}
                         subtext="Total inventory valuation"
                         icon={DollarSign}
                         colorClass="text-cyan-400"
@@ -220,7 +241,7 @@ export default function Dashboard() {
                 <Link href="/assets">
                     <StatCard
                         title="Net Asset Value"
-                        value="$850,400"
+                        value={`₹${((stats?.total_value || 0) * 0.85).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
                         subtext="After depreciation"
                         icon={TrendingDown}
                         colorClass="text-purple-400"
@@ -230,7 +251,7 @@ export default function Dashboard() {
                 <Link href="/procurement">
                     <StatCard
                         title="YTD Purchases"
-                        value="$125,000"
+                        value="₹3,25,000"
                         subtext="Fiscal year spend"
                         icon={ShoppingBag}
                         colorClass="text-amber-400"

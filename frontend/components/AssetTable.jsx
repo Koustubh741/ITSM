@@ -21,6 +21,7 @@ export default function AssetTable({ assets }) {
                         <th className="px-6 py-4">Segment</th>
                         <th className="px-6 py-4">Type</th>
                         <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4">Cost</th>
                         <th className="px-6 py-4">Assigned To</th>
                         <th className="px-6 py-4">Assigned By</th>
                         <th className="px-6 py-4">Location</th>
@@ -47,6 +48,9 @@ export default function AssetTable({ assets }) {
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ring-inset ${getStatusColor(asset.status)}`}>
                                     {asset.status}
                                 </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-300 font-mono">
+                                ₹{asset.cost ? asset.cost.toLocaleString() : '0'}
                             </td>
                             <td className="px-6 py-4 text-slate-300">
                                 {asset.assigned_to ? (

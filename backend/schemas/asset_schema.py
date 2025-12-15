@@ -16,6 +16,7 @@ class AssetBase(BaseModel):
     assigned_to: Optional[str] = None
     assigned_by: Optional[str] = None
     specifications: Optional[Dict[str, Any]] = {}
+    cost: Optional[float] = 0.0
 
     # Renewal Workflow Fields
     renewal_status: Optional[str] = None # None, "Requested", "IT_Approved", "Finance_Approved", "Commercial_Approved", "Renewed"

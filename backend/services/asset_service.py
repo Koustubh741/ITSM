@@ -77,7 +77,10 @@ def _generate_mock_data():
             procurement_status=random.choice(["Requested", "Approved", "Ordered"]) if random.random() > 0.9 else None,
             
             # 10% chance to be in Disposal Phase (Expired/Retired)
-            disposal_status=random.choice(["Pending_Validation", "Ready_For_Wipe", "Wiped"]) if random.random() > 0.9 else None
+            disposal_status=random.choice(["Pending_Validation", "Ready_For_Wipe", "Wiped"]) if random.random() > 0.9 else None,
+            
+            # Asset Value / Cost
+            cost=random.randint(20000, 250000) # Rupees
         ))
 
 def get_all_assets() -> List[AssetResponse]:
@@ -124,6 +127,9 @@ def get_asset_stats():
     # Warranty expiring soon (next 30 days) or expired
     today = date.today()
     warranty_risk = sum(1 for a in assets_db if a.warranty_expiry and a.warranty_expiry <= today + timedelta(days=30))
+
+    # Total Value
+    total_value = sum(a.cost for a in assets_db if a.cost)
 
     # Location Breakdown
     location_counts = {}
@@ -177,6 +183,7 @@ def get_asset_stats():
 
     return {
         "total": total,
+        "total_value": total_value,
         "active": active,
         "in_stock": in_stock,
         "repair": repair,

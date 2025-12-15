@@ -53,7 +53,7 @@ export default function FinancialCenterPage() {
                             <div className="p-2 bg-yellow-500/10 text-yellow-400 rounded-lg"><DollarSign size={20} /></div>
                             <span className="text-xs text-emerald-400 flex items-center gap-1">+12% <TrendingUp size={12} /></span>
                         </div>
-                        <div className="text-2xl font-bold text-white">${(data.total_spend / 1000000).toFixed(2)}M</div>
+                        <div className="text-2xl font-bold text-white">₹{(data.total_spend / 1000000).toFixed(2)}M</div>
                         <div className="text-sm text-slate-500">Total Asset Value</div>
                     </div>
                     <div className="glass-panel p-6 rounded-2xl bg-slate-900 border border-white/10">
@@ -61,7 +61,7 @@ export default function FinancialCenterPage() {
                             <div className="p-2 bg-blue-500/10 text-blue-400 rounded-lg"><CreditCard size={20} /></div>
                             <span className="text-xs text-slate-500">YTD</span>
                         </div>
-                        <div className="text-2xl font-bold text-white">${(data.ytd_spend / 1000).toFixed(0)}k</div>
+                        <div className="text-2xl font-bold text-white">₹{(data.ytd_spend / 1000).toFixed(0)}k</div>
                         <div className="text-sm text-slate-500">Spend This Year</div>
                     </div>
                     <div className="glass-panel p-6 rounded-2xl bg-slate-900 border border-white/10">
@@ -69,7 +69,7 @@ export default function FinancialCenterPage() {
                             <div className="p-2 bg-purple-500/10 text-purple-400 rounded-lg"><TrendingUp size={20} /></div>
                             <span className="text-xs text-orange-400 flex items-center gap-1">+5% <TrendingUp size={12} /></span>
                         </div>
-                        <div className="text-2xl font-bold text-white">${(data.projected / 1000).toFixed(0)}k</div>
+                        <div className="text-2xl font-bold text-white">₹{(data.projected / 1000).toFixed(0)}k</div>
                         <div className="text-sm text-slate-500">Projected Renewal Cost</div>
                     </div>
                     <div className="glass-panel p-6 rounded-2xl bg-slate-900 border border-white/10">
@@ -77,7 +77,7 @@ export default function FinancialCenterPage() {
                             <div className="p-2 bg-red-500/10 text-red-400 rounded-lg"><TrendingDown size={20} /></div>
                             <span className="text-xs text-slate-500">Monthly</span>
                         </div>
-                        <div className="text-2xl font-bold text-white">$4.2k</div>
+                        <div className="text-2xl font-bold text-white">₹4.2k</div>
                         <div className="text-sm text-slate-500">Avg. Depreciation</div>
                     </div>
                 </div>
