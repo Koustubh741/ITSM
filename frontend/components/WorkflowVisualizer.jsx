@@ -57,10 +57,10 @@ const WorkflowVisualizer = () => {
     };
 
     return (
-        <div className="glass-panel p-6 w-full overflow-x-auto">
-            <div className="flex justify-between items-center mb-6">
+        <div className="glass-panel p-8 w-full overflow-x-auto">
+            <div className="flex justify-between items-center mb-8">
                 <div>
-                    <h3 className="text-lg font-bold text-white">Asset Management Lifecycle</h3>
+                    <h3 className="text-xl font-bold text-white">Asset Management Lifecycle Steps</h3>
                     <p className="text-slate-400 text-sm">Standard operational workflow for new assets</p>
                 </div>
                 <div className="px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-medium">
@@ -68,30 +68,42 @@ const WorkflowVisualizer = () => {
                 </div>
             </div>
 
-            <div className="relative flex items-center justify-between min-w-[800px] pt-4 pb-2">
-                {/* Connecting Line */}
-                <div className="absolute top-1/2 left-0 w-full h-1 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-emerald-500/20 -translate-y-6 z-0 rounded-full"></div>
+            <div className="flex gap-6 items-start justify-between min-w-[800px] relative">
+
+                {/* Flowing Line Animation */}
+                <div className="absolute top-[82px] left-10 right-10 h-1 bg-slate-800 z-0 rounded-full overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-flow-beam opacity-75"></div>
+                </div>
+
+                <style jsx>{`
+                    @keyframes flow-beam {
+                        0% { transform: translateX(-100%); }
+                        100% { transform: translateX(100%); }
+                    }
+                    .animate-flow-beam {
+                        animation: flow-beam 3s linear infinite;
+                    }
+                `}</style>
 
                 {steps.map((step, index) => (
                     <div key={step.id} className="relative z-10 flex flex-col items-center flex-1 group">
-                        {/* Circle */}
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border-2 backdrop-blur-md transition-all duration-300 transform group-hover:scale-110 shadow-lg ${getColorClasses(step.color)} mb-4`}>
-                            <step.icon size={24} strokeWidth={1.5} />
+
+                        {/* Step Label */}
+                        <span className="text-slate-500 text-xs font-bold tracking-widest uppercase mb-3 bg-slate-800/50 px-3 py-1 rounded-full border border-white/5">
+                            Step {index + 1}
+                        </span>
+
+                        {/* Circle (Enlarged) */}
+                        <div className={`w-20 h-20 rounded-3xl flex items-center justify-center border-2 backdrop-blur-md transition-all duration-300 transform group-hover:scale-105 shadow-xl ${getColorClasses(step.color)} mb-5`}>
+                            <step.icon size={32} strokeWidth={1.5} />
                         </div>
 
                         {/* Text Content */}
-                        <div className="text-center space-y-1">
-                            <h4 className="text-white font-semibold text-sm">{step.title}</h4>
-                            <p className="text-slate-500 text-[10px] uppercase font-bold tracking-wider">{step.assigned}</p>
-                            <p className="text-slate-400 text-xs max-w-[120px] leading-tight">{step.description}</p>
+                        <div className="text-center space-y-2">
+                            <h4 className="text-white font-bold text-lg">{step.title}</h4>
+                            <p className="text-slate-500 text-[11px] uppercase font-bold tracking-wider">{step.assigned}</p>
+                            <p className="text-slate-400 text-xs max-w-[140px] leading-relaxed mx-auto">{step.description}</p>
                         </div>
-
-                        {/* Connecting Arrow for all but last */}
-                        {index !== steps.length - 1 && (
-                            <div className="absolute top-5 -right-[50%] translate-x-1/2 text-slate-700">
-                                <ArrowRight size={16} />
-                            </div>
-                        )}
                     </div>
                 ))}
             </div>
