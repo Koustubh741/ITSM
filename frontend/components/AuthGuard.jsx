@@ -3,15 +3,10 @@ import { useRouter } from 'next/router';
 import { useRole } from '@/contexts/RoleContext';
 
 const ROLE_DASHBOARD_MAP = {
-    'System Admin': '/dashboard/admin',
-    'Asset Manager': '/dashboard/asset-manager',
-    'Asset Owner': '/dashboard/asset-owner',
-    'Custodian': '/dashboard/custodian',
-    'Inventory Manager': '/dashboard/inventory',
-    'Procurement Manager': '/dashboard/procurement',
-    'IT Support': '/dashboard/it-support',
-    'Audit Officer': '/dashboard/audit',
-    'Finance': '/dashboard/finance',
+    'System Admin': '/dashboard/system-admin',
+    'Asset & Inventory Manager': '/dashboard/asset-inventory-manager',
+    'Procurement & Finance': '/dashboard/procurement-finance',
+    'IT Management': '/dashboard/it-management',
     'End User': '/dashboard/end-user'
 };
 

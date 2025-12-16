@@ -4,14 +4,9 @@ const RoleContext = createContext();
 
 export const ROLES = [
     { label: 'System Admin', dept: 'IT Dept' },
-    { label: 'Asset Manager', dept: 'IT Asset' },
-    { label: 'Asset Owner', dept: 'Operations' },
-    { label: 'Custodian', dept: 'Logistics' },
-    { label: 'Inventory Manager', dept: 'Warehouse' },
-    { label: 'Procurement Manager', dept: 'Procurement' },
-    { label: 'IT Support', dept: 'Helpdesk' },
-    { label: 'Audit Officer', dept: 'Compliance' },
-    { label: 'Finance', dept: 'Accounts' },
+    { label: 'Asset & Inventory Manager', dept: 'Asset Mgmt' },
+    { label: 'Procurement & Finance', dept: 'Finance' },
+    { label: 'IT Management', dept: 'IT Dept' },
     { label: 'End User', dept: 'Employee' },
 ];
 
