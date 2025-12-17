@@ -8,6 +8,8 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import { ArrowLeft, User, MapPin, Calendar, Activity, Server, Shield, QrCode, ScanBarcode, AlertCircle, Download } from 'lucide-react'
 
+import { initialMockAssets } from '@/data/mockAssets';
+
 export default function AssetDetail() {
     const router = useRouter()
     const { id } = router.query
@@ -17,18 +19,39 @@ export default function AssetDetail() {
     const [showQR, setShowQR] = useState(false)
     const [showBarcode, setShowBarcode] = useState(false)
 
+
+
     useEffect(() => {
         if (!id) return
         const fetchAsset = async () => {
             try {
-                const [assetRes, eventsRes] = await Promise.all([
-                    axios.get(`http://localhost:8000/assets/${id}`),
-                    axios.get(`http://localhost:8000/assets/${id}/events`)
-                ])
-                setAsset(assetRes.data)
-                setEvents(eventsRes.data)
+                // Try API first (mock call) - removed for frontend-only requirement
+                // const [assetRes, eventsRes] = await Promise.all([ ... ])
+                throw new Error("Use local data")
             } catch (error) {
-                console.error("Failed to fetch asset", error)
+                // Load from localStorage + Initial
+                const savedAssets = JSON.parse(localStorage.getItem('assets') || '[]');
+
+                // Merge initial if local is empty or incomplete (simple check)
+                let allAssets = savedAssets.length > 0 ? savedAssets : initialMockAssets;
+
+                // Lookup by ID
+                const foundAsset = allAssets.find(a => a.id == id); // Loose equality for string/number match
+
+                if (foundAsset) {
+                    setAsset(foundAsset);
+
+                    // Mock events based on found asset
+                    const mockEvents = [
+                        { event: "Asset Deployed", description: "Asset assigned and deployed to end user", date: "2024-12-10", user: "System Admin", status: "completed" },
+                        { event: "Warranty Registered", description: "3-year warranty registered with vendor", date: foundAsset.purchase_date || "2023-05-16", user: "Procurement Team", status: "completed" },
+                        { event: "Initial Setup", description: "Device configured with security policies", date: foundAsset.purchase_date || "2023-05-15", user: "IT Support", status: "completed" },
+                        { event: "Procurement Approved", description: "Purchase order approved", date: foundAsset.purchase_date || "2023-04-20", user: "Finance Manager", status: "completed" },
+                    ]
+                    setEvents(mockEvents)
+                } else {
+                    setAsset(null); // Asset not found
+                }
             } finally {
                 setLoading(false)
             }
@@ -74,18 +97,36 @@ export default function AssetDetail() {
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">Vendor</p>
-                                <p className="font-medium text-slate-100">{asset.vendor}</p>
+                                <p className="font-medium text-slate-100 uppercase">{asset.name.split(' ')[0]}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-400 mb-1">Asset ID</p>
+                                <p className="font-medium text-slate-100">{asset.id}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">Type</p>
                                 <p className="font-medium text-slate-100">{asset.type}</p>
                             </div>
-                            {asset.specifications && Object.entries(asset.specifications).map(([key, value]) => (
-                                <div key={key}>
-                                    <p className="text-sm text-slate-400 mb-1 capitalize">{key}</p>
-                                    <p className="font-medium text-slate-100">{value}</p>
-                                </div>
-                            ))}
+                            <div>
+                                <p className="text-sm text-slate-400 mb-1">Processor</p>
+                                <p className="font-medium text-slate-100">{asset.specifications?.Processor || (asset.segment === 'IT' ? 'Intel Core i7 vPro' : 'N/A')}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-400 mb-1">RAM</p>
+                                <p className="font-medium text-slate-100">{asset.specifications?.RAM || (asset.segment === 'IT' ? '32GB DDR4' : 'N/A')}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-400 mb-1">Storage</p>
+                                <p className="font-medium text-slate-100">{asset.specifications?.Storage || (asset.segment === 'IT' ? '1TB NVMe SSD' : 'N/A')}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-400 mb-1">OS</p>
+                                <p className="font-medium text-slate-100">{asset.specifications?.OS || (asset.segment === 'IT' ? 'Windows 11 Ent' : 'N/A')}</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-slate-400 mb-1">Condition</p>
+                                <p className="font-medium text-emerald-400">Excellent</p>
+                            </div>
                         </div>
                     </div>
 
@@ -340,13 +381,23 @@ export default function AssetDetail() {
                                 {showQR && (
                                     <div className="bg-white p-4 rounded-lg flex justify-center animate-in fade-in zoom-in duration-300">
                                         <QRCode
-                                            value={`
-Asset: ${asset.name}
-S/N: ${asset.serial_number}
+                                            value={`ASSET IDENTITY CARD
+-------------------
+Name: ${asset.name}
 Model: ${asset.model}
-Assigned: ${asset.assigned_to || 'N/A'}
-                                            `.trim()}
-                                            size={150}
+S/N: ${asset.serial_number}
+ID: ${asset.id}
+Type: ${asset.type}
+Status: ${asset.status}
+Loc: ${asset.location}
+User: ${asset.assigned_to || 'Unassigned'}
+Dept: ${asset.department || 'IT Operations'}
+Purchased: ${asset.purchase_date}
+Warranty: ${asset.warranty_expiry || 'N/A'}
+Specs: ${asset.specifications?.Processor || 'Standard'} / ${asset.specifications?.RAM || 'Standard'}
+-------------------
+Property of AssetMgr`}
+                                            size={180}
                                         />
                                     </div>
                                 )}
@@ -356,8 +407,8 @@ Assigned: ${asset.assigned_to || 'N/A'}
                                         <Barcode
                                             value={asset.serial_number}
                                             width={1.5}
-                                            height={40}
-                                            fontSize={12}
+                                            height={50}
+                                            fontSize={14}
                                             background="#ffffff"
                                             lineColor="#000000"
                                         />
@@ -372,7 +423,7 @@ Assigned: ${asset.assigned_to || 'N/A'}
                                 className="w-full py-2 px-4 rounded-lg bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 transition-all flex items-center justify-center font-medium"
                             >
                                 <QrCode size={18} className="mr-2" />
-                                {showQR ? 'Hide QR Code' : 'Show QR Code'}
+                                {showQR ? 'Hide QR Code' : 'Show Asset QR'}
                             </button>
 
                             <button

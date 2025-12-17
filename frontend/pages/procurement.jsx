@@ -1,34 +1,32 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
 import Link from 'next/link'
 import { ArrowLeft, ShoppingCart, Check, Truck, Package } from 'lucide-react'
 
 export default function Procurement() {
-    const [assets, setAssets] = useState([])
     const [loading, setLoading] = useState(true)
 
-    const fetchProcurement = async () => {
-        try {
-            const res = await axios.get('http://localhost:8000/assets/')
-            setAssets(res.data.filter(a => a.procurement_status))
-        } catch (error) {
-            console.error("Failed to fetch procurement", error)
-        } finally {
-            setLoading(false)
-        }
-    }
+    // Mock procurement data
+    const [assets, setAssets] = useState([
+        { id: 1, name: 'Dell Workstation', type: 'Desktop', vendor: 'Dell', procurement_status: 'Requested', assigned_to: 'John Doe' },
+        { id: 2, name: 'MacBook Pro M3', type: 'Laptop', vendor: 'Apple', procurement_status: 'Approved', assigned_to: 'Sarah Lee' },
+        { id: 3, name: 'HP Printer XL', type: 'Printer', vendor: 'HP', procurement_status: 'Ordered', assigned_to: 'Logistics' },
+    ])
 
     useEffect(() => {
-        fetchProcurement()
+        setTimeout(() => setLoading(false), 500)
     }, [])
 
     const handleAction = async (assetId, action) => {
-        try {
-            await axios.post(`http://localhost:8000/workflows/procurement/${assetId}?action=${action}`)
-            fetchProcurement()
-        } catch (error) {
-            alert("Failed to update status")
+        // Mock action handler
+        const statusMap = {
+            'Requested': 'Approved',
+            'Approved': 'Ordered',
+            'Ordered': 'Received'
         }
+        setAssets(prev => prev.map(a =>
+            a.id === assetId ? { ...a, procurement_status: statusMap[a.procurement_status] || a.procurement_status } : a
+        ))
+        alert(`Procurement action "${action}" completed successfully! (Mock Mode)`)
     }
 
     const getStatusStep = (status) => {

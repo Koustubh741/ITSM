@@ -1,34 +1,32 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
 import Link from 'next/link'
 import { ArrowLeft, Trash2, ShieldAlert, HardDrive, CheckCircle } from 'lucide-react'
 
 export default function Disposal() {
-    const [assets, setAssets] = useState([])
     const [loading, setLoading] = useState(true)
 
-    const fetchDisposal = async () => {
-        try {
-            const res = await axios.get('http://localhost:8000/assets/')
-            setAssets(res.data.filter(a => a.disposal_status))
-        } catch (error) {
-            console.error("Failed to fetch disposal list", error)
-        } finally {
-            setLoading(false)
-        }
-    }
+    // Mock disposal data
+    const [assets, setAssets] = useState([
+        { id: 1, name: 'Old Server XYZ', serial_number: 'SRV-OLD-001', disposal_status: 'Pending_Validation' },
+        { id: 2, name: 'Retired Laptop', serial_number: 'LAP-RET-442', disposal_status: 'Ready_For_Wipe' },
+        { id: 3, name: 'Legacy Desktop', serial_number: 'DSK-LEG-789', disposal_status: 'Wiped' },
+    ])
 
     useEffect(() => {
-        fetchDisposal()
+        setTimeout(() => setLoading(false), 500)
     }, [])
 
     const handleAction = async (assetId, action) => {
-        try {
-            await axios.post(`http://localhost:8000/workflows/disposal/${assetId}?action=${action}`)
-            fetchDisposal()
-        } catch (error) {
-            alert("Failed to update status")
+        // Mock action handler
+        const statusMap = {
+            validate: 'Ready_For_Wipe',
+            wipe: 'Wiped',
+            dispose: 'Disposed'
         }
+        setAssets(prev => prev.map(a =>
+            a.id === assetId ? { ...a, disposal_status: statusMap[action] } : a
+        ))
+        alert(`Action "${action}" completed successfully! (Mock Mode)`)
     }
 
     if (loading) return <div className="p-8 text-white">Loading...</div>

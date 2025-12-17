@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/router'
 import { Plus, Search, Filter } from 'lucide-react'
 import AssetTable from '@/components/AssetTable'
+import { initialMockAssets } from '@/data/mockAssets'
 
 export default function AssetsPage() {
     const [assets, setAssets] = useState([])
@@ -12,14 +13,20 @@ export default function AssetsPage() {
     const [filterStatus, setFilterStatus] = useState('All')
     const [filterSegment, setFilterSegment] = useState('All')
 
+
+
     useEffect(() => {
         const fetchAssets = async () => {
-            try {
-                const res = await axios.get('http://localhost:8000/assets/')
-                setAssets(res.data)
-                setFilteredAssets(res.data)
-            } catch (error) {
-                console.error("Failed to fetch assets", error)
+            // Mock Data Priority: localStorage -> initialMockAssets
+            const savedAssets = localStorage.getItem('assets');
+            if (savedAssets) {
+                const parsed = JSON.parse(savedAssets);
+                setAssets(parsed);
+                setFilteredAssets(parsed);
+            } else {
+                setAssets(initialMockAssets);
+                setFilteredAssets(initialMockAssets);
+                localStorage.setItem('assets', JSON.stringify(initialMockAssets));
             }
         }
         fetchAssets()

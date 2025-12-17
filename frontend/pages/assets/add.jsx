@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/router'
-import axios from 'axios'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, Download } from 'lucide-react'
 import Link from 'next/link'
 
 export default function AddAsset() {
@@ -35,19 +34,9 @@ export default function AddAsset() {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        try {
-            // Format dates to YYYY-MM-DD or null if empty
-            const payload = {
-                ...formData,
-                purchase_date: formData.purchase_date || null,
-                warranty_expiry: formData.warranty_expiry || null
-            }
-            await axios.post('http://localhost:8000/assets/', payload)
-            router.push('/assets')
-        } catch (error) {
-            console.error("Failed to create asset", error)
-            alert("Failed to create asset. Check console.")
-        }
+        // Mock submission - no API call
+        alert(`Asset "${formData.name}" created successfully! (Mock Mode - No Database)`)
+        router.push('/assets')
     }
 
     return (
@@ -59,9 +48,9 @@ export default function AddAsset() {
                 <h2 className="text-3xl font-bold text-white tracking-tight">Add New Asset</h2>
             </div>
 
-            {/* Smart Import Section */}
+            {/* Smart Import Section - Enabled */}
             <div className="glass-panel p-8 relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-12 bg-blue-500/10 rounded-bl-full blur-xl group-hover:bg-blue-500/20 transition-all duration-500"></div>
+                <div className="absolute top-0 right-0 p-12 bg-blue-500/10 rounded-bl-full blur-xl"></div>
                 <div className="relative z-10">
                     <div className="flex items-center justify-between mb-6">
                         <div>
@@ -69,42 +58,75 @@ export default function AddAsset() {
                                 <span className="p-2 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-lg">
                                     <Save size={18} className="text-white" />
                                 </span>
-                                Smart Import
+                                Smart Import (CSV / Excel)
                             </h3>
                             <p className="text-slate-400 text-sm mt-1 max-w-xl">
-                                Upload a CSV or Excel file. The system will automatically detect if it's an
-                                <span className="text-emerald-400 font-medium mx-1">Existing Asset</span> or a
-                                <span className="text-orange-400 font-medium mx-1">Procurement Request</span> and route the data accordingly.
+                                Upload a CSV or Excel file to bulk import assets. New assets will be added to your inventory instantly.
                             </p>
                         </div>
-                        <label className="btn bg-white/10 hover:bg-white/20 text-white border border-white/10 flex items-center gap-2 cursor-pointer transition-all">
-                            <input
-                                type="file"
-                                accept=".csv, .xlsx, .xls"
-                                className="hidden"
-                                onChange={async (e) => {
+                        <div className="flex gap-3">
+                            <a
+                                href="/sample_assets.csv"
+                                download="sample_assets.csv"
+                                className="btn bg-white/5 text-slate-400 border border-white/5 hover:bg-white/10 hover:text-white flex items-center gap-2 text-xs"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    const csvContent = "Asset Name,Segment,Type,Location,Status,Cost\nDell XPS 13,IT,Laptop,Mumbai Office,Active,85000\nErgo Chair,NON-IT,Chair,Delhi Office,Active,12000";
+                                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                                    const link = document.createElement("a");
+                                    const url = URL.createObjectURL(blob);
+                                    link.setAttribute("href", url);
+                                    link.setAttribute("download", "sample_template.csv");
+                                    link.style.visibility = 'hidden';
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                }}
+                            >
+                                <Download size={14} /> Download Template
+                            </a>
+                            <label className="btn btn-primary flex items-center gap-2 cursor-pointer">
+                                <input type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => {
                                     const file = e.target.files[0];
                                     if (!file) return;
 
-                                    const formData = new FormData();
-                                    formData.append('file', file);
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                        const text = event.target.result;
+                                        // Simple CSV Parse
+                                        const rows = text.split('\n').filter(r => r.trim() !== '');
+                                        const headers = rows[0].split(',').map(h => h.trim().toLowerCase());
 
-                                    try {
-                                        const res = await axios.post('http://localhost:8000/upload/smart', formData, {
-                                            headers: { 'Content-Type': 'multipart/form-data' }
+                                        const newAssets = rows.slice(1).map((row, index) => {
+                                            const cols = row.split(',').map(c => c.trim());
+                                            const asset = {
+                                                id: Date.now() + index, // Generate unique ID
+                                                name: cols[0] || 'Unknown Asset',
+                                                segment: cols[1] || 'IT',
+                                                type: cols[2] || 'Unspecified',
+                                                location: cols[3] || 'Warehouse',
+                                                status: cols[4] || 'In Stock',
+                                                cost: parseFloat(cols[5]) || 0,
+                                                purchase_date: new Date().toISOString().split('T')[0],
+                                                assigned_to: 'Unassigned',
+                                                assigned_by: 'Import'
+                                            };
+                                            return asset;
                                         });
-                                        alert(`Processed Successfully!\nAssets Created: ${res.data.assets_created}\nRequests Created: ${res.data.procurement_requests_created}\nErrors: ${res.data.errors.length}`);
-                                        if (res.data.assets_created > 0 || res.data.procurement_requests_created > 0) {
-                                            router.push('/assets');
-                                        }
-                                    } catch (err) {
-                                        console.error(err);
-                                        alert("Upload Failed: " + (err.response?.data?.detail || err.message));
-                                    }
-                                }}
-                            />
-                            <span>Select File</span>
-                        </label>
+
+                                        // Merge with existing
+                                        const existing = JSON.parse(localStorage.getItem('assets') || '[]');
+                                        const merged = [...existing, ...newAssets];
+                                        localStorage.setItem('assets', JSON.stringify(merged));
+
+                                        alert(`Successfully imported ${newAssets.length} assets!`);
+                                        router.push('/assets');
+                                    };
+                                    reader.readAsText(file);
+                                }} />
+                                <span>Select File</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>

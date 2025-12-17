@@ -1,43 +1,42 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle, XCircle, DollarSign, Clock, AlertCircle } from 'lucide-react'
 
 export default function Renewals() {
-    const [assets, setAssets] = useState([])
     const [loading, setLoading] = useState(true)
-    const [stats, setStats] = useState({ requested: 0, it_approved: 0, finance_approved: 0 })
 
-    const fetchRenewals = async () => {
-        try {
-            const res = await axios.get('http://localhost:8000/assets/')
-            const renewalAssets = res.data.filter(a => a.renewal_status)
-            setAssets(renewalAssets)
+    // Mock renewals data
+    const [assets, setAssets] = useState([
+        { id: 1, name: 'Dell XPS 15', serial_number: 'DXP-992', assigned_to: 'Tech Team', renewal_cost: 1500, renewal_status: 'Requested' },
+        { id: 2, name: 'HP Printer Pro', serial_number: 'HPP-445', assigned_to: 'Marketing', renewal_cost: 800, renewal_status: 'IT_Approved' },
+        { id: 3, name: 'MacBook Air', serial_number: 'MBA-223', assigned_to: 'Design', renewal_cost: 2200, renewal_status: 'Finance_Approved' },
+    ])
 
-            setStats({
-                requested: renewalAssets.filter(a => a.renewal_status === 'Requested').length,
-                it_approved: renewalAssets.filter(a => a.renewal_status === 'IT_Approved').length,
-                finance_approved: renewalAssets.filter(a => a.renewal_status === 'Finance_Approved').length
-            })
-        } catch (error) {
-            console.error("Failed to fetch renewals", error)
-        } finally {
-            setLoading(false)
-        }
-    }
+    const [stats, setStats] = useState({
+        requested: assets.filter(a => a.renewal_status === 'Requested').length,
+        it_approved: assets.filter(a => a.renewal_status === 'IT_Approved').length,
+        finance_approved: assets.filter(a => a.renewal_status === 'Finance_Approved').length
+    })
 
     useEffect(() => {
-        fetchRenewals()
+        setTimeout(() => setLoading(false), 500)
     }, [])
 
     const handleAction = async (assetId, action) => {
-        try {
-            await axios.post(`http://localhost:8000/workflows/review/${assetId}?action=${action}`)
-            fetchRenewals() // Refresh data
-        } catch (error) {
-            console.error("Failed to process action", error)
-            alert("Failed to process action")
+        // Mock action handler
+        const statusMap = {
+            'Requested': 'IT_Approved',
+            'IT_Approved': 'Finance_Approved',
+            'Finance_Approved': 'Commercial_Approved'
         }
+        setAssets(prev => prev.map(a => {
+            if (a.id === assetId) {
+                if (action === 'reject') return { ...a, renewal_status: 'Rejected' }
+                return { ...a, renewal_status: statusMap[a.renewal_status] || a.renewal_status }
+            }
+            return a
+        }))
+        alert(`Renewal action "${action}" completed successfully! (Mock Mode)`)
     }
 
     const getStatusBadge = (status) => {

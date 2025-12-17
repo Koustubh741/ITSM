@@ -53,19 +53,15 @@ export default function AssetTable({ assets }) {
                                 ₹{asset.cost ? asset.cost.toLocaleString() : '0'}
                             </td>
                             <td className="px-6 py-4 text-slate-300">
-                                {asset.assigned_to ? (
-                                    <div className="flex items-center space-x-2">
-                                        <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs text-indigo-300 border border-indigo-500/30">
-                                            {asset.assigned_to.charAt(0).toUpperCase()}
-                                        </div>
-                                        <span className="truncate max-w-[120px]">{asset.assigned_to}</span>
+                                <div className="flex items-center space-x-2">
+                                    <div className="w-6 h-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-xs text-indigo-300 border border-indigo-500/30">
+                                        {asset.assigned_to?.charAt(0).toUpperCase() || 'A'}
                                     </div>
-                                ) : (
-                                    <span className="text-slate-500 italic text-xs">Unassigned</span>
-                                )}
+                                    <span className="truncate max-w-[120px]">{asset.assigned_to || 'Asset Team'}</span>
+                                </div>
                             </td>
                             <td className="px-6 py-4 text-slate-300 font-mono text-xs">
-                                {asset.assigned_by || '-'}
+                                {asset.assigned_by || 'Admin'}
                             </td>
                             <td className="px-6 py-4 text-slate-300 text-xs">{asset.location}</td>
                             <td className="px-6 py-4 text-right">

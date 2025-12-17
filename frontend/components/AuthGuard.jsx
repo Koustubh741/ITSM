@@ -11,23 +11,15 @@ const ROLE_DASHBOARD_MAP = {
 };
 
 export default function AuthGuard({ children }) {
-    const { isAuthenticated, currentRole, ROLES } = useRole();
+    const { isAuthenticated, currentRole, ROLES, isLoading } = useRole();
     const router = useRouter();
     const [authorized, setAuthorized] = useState(false);
 
     useEffect(() => {
-        // Wait for initial auth check (RoleContext might need a 'loading' state but relying on initial false + effect works if fast enough, 
-        // strictly we should have isAuthChecked state in context but given "mock", let's assume if localStorage was there it's loaded)
-        // Actually RoleContext initializes via useEffect, so there is a race condition. 
-        // We should delay rendering children until we know auth state is settled. 
-        // BUT, since we are doing simple mock, let's just check:
-        // Ideally RoleContext provides `isAuthReady`. 
-        // For now, let's assume if it's false, we redirect to login, if it turns true later, we redirect back? 
-        // No, that causes flash. 
-        // Let's just run this effect on change.
+        if (isLoading) return; // Wait for hydration
 
         const checkAuth = () => {
-            const currentPath = router.pathname;
+            const currentPath = router.asPath.split('?')[0];
             const isLoginPage = currentPath === '/login';
 
             if (!isAuthenticated) {
@@ -50,8 +42,7 @@ export default function AuthGuard({ children }) {
                     // Check if on a dashboard route, does it match role?
                     if (currentPath.startsWith('/dashboard/')) {
                         const expectedPath = ROLE_DASHBOARD_MAP[currentRole.label];
-                        // exact match or just starts with? "LOCKED DASHBOARDS" implies specific paths.
-                        // Dashboard paths are distinct. 
+
                         if (expectedPath && currentPath !== expectedPath) {
                             // Wrong dashboard for role
                             router.push(expectedPath);
@@ -59,28 +50,21 @@ export default function AuthGuard({ children }) {
                             setAuthorized(true);
                         }
                     } else {
-                        // Allow other pages (like /settings etc if they exist) or redirect?
-                        // User said "ENTERPRISE dashboard experience for these two roles is FINAL".
-                        // Assuming other pages are allowed if they are general.
-                        // But for "Route Protection: ... if role does not match dashboard -> redirect".
+                        // Allow other pages
                         setAuthorized(true);
                     }
                 }
             }
         };
 
-        // We need a small timeout or check if RoleContext is ready. 
-        // Since RoleContext uses useEffect, clear initial "unauth" might trigger redirect.
-        // Let's assume RoleContext loads fast from localStorage. 
-        // To prevent flash, we could just render nothing until authorized.
-
         checkAuth();
 
-    }, [isAuthenticated, currentRole, router.pathname]);
+    }, [isAuthenticated, currentRole, router.asPath, isLoading]);
 
-    // Simple loading state to prevent flash of protected content
-    if (!authorized && router.pathname !== '/login') {
-        return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-500">Loading...</div>;
+    // Show loading state while hydrating or unauthorized/redirecting
+    if (isLoading || (!authorized && router.pathname !== '/login')) {
+        // Render a blank dark background to prevent white flash, but no "Loading..." text to reduce "different page" feel
+        return <div className="min-h-screen bg-slate-950" />;
     }
 
     return children;

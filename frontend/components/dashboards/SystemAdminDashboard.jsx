@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
 import Link from 'next/link'
 import { Package, CheckCircle, AlertTriangle, Clock, Activity, Download, Plus, Layers, LayoutGrid, Calendar, ArrowUpRight, DollarSign, TrendingDown, ShoppingBag } from 'lucide-react'
 import BarChart from '@/components/BarChart'
@@ -7,55 +6,152 @@ import PieChart from '@/components/PieChart'
 import TrendLineChart from '@/components/TrendLineChart'
 import AlertsFeed from '@/components/AlertsFeed'
 import WorkflowVisualizer from '@/components/WorkflowVisualizer'
+import { initialMockAssets } from '@/data/mockAssets'
 
 export default function SystemAdminDashboard() {
-    const [stats, setStats] = useState(null)
-    const [recentAssets, setRecentAssets] = useState([])
-    const [allAssets, setAllAssets] = useState([])
     const [loading, setLoading] = useState(true)
     const [chartMetric, setChartMetric] = useState('location')
     const [trendView, setTrendView] = useState('monthly')
-
-    // Toggle States
     const [timeRange, setTimeRange] = useState('Overview') // Overview, Analytics
 
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                // Using mock data fallback if API fails (since we are moving to frontend-heavy logic)
-                const mockStats = {
-                    total: 124, active: 89, repair: 12, warranty_risk: 5,
-                    total_value: 4500000,
-                    by_status: [{ name: 'Active', value: 89 }, { name: 'Repair', value: 12 }, { name: 'Retired', value: 15 }, { name: 'In Stock', value: 8 }],
-                    by_segment: [{ name: 'IT', value: 80 }, { name: 'Non-IT', value: 44 }],
-                    by_type: [{ name: 'Laptop', value: 45 }, { name: 'Desktop', value: 30 }, { name: 'Printer', value: 10 }],
-                    by_location: [{ name: 'New York', value: 50 }, { name: 'London', value: 30 }, { name: 'Tokyo', value: 20 }, { name: 'Singapore', value: 24 }],
-                    trends: { monthly: [{ name: 'Jan', value: 10 }, { name: 'Feb', value: 15 }, { name: 'Mar', value: 12 }, { name: 'Apr', value: 20 }, { name: 'May', value: 18 }, { name: 'Jun', value: 25 }], quarterly: [] }
-                };
 
-                // Try fetch, else mock
-                try {
-                    const [statsRes, assetsRes] = await Promise.all([
-                        axios.get('http://localhost:8000/assets/stats'),
-                        axios.get('http://localhost:8000/assets/')
-                    ])
-                    setStats(statsRes.data)
-                    setAllAssets(assetsRes.data)
-                    setRecentAssets(assetsRes.data.slice(0, 5))
-                } catch (e) {
-                    console.warn("API unavailable, using mocks", e);
-                    setStats(mockStats);
-                    setAllAssets([]);
-                    setRecentAssets([]);
-                }
-            } catch (error) {
-                console.error("Failed to fetch dashboard data", error)
-            } finally {
-                setLoading(false)
+
+    const [allAssets, setAllAssets] = useState([]);
+
+    const [stats, setStats] = useState({
+        total: 0,
+        active: 0,
+        repair: 0,
+        warranty_risk: 0,
+        total_value: 0,
+        by_status: [],
+        by_segment: [],
+        by_type: [],
+        by_location: [],
+        trends: { monthly: [], quarterly: [] }
+    });
+
+    useEffect(() => {
+        // Load assets from localStorage or fallback to initial mock data
+        const loadAssets = () => {
+            const savedAssets = localStorage.getItem('assets');
+            if (savedAssets) {
+                setAllAssets(JSON.parse(savedAssets));
+            } else {
+                setAllAssets(initialMockAssets);
+                localStorage.setItem('assets', JSON.stringify(initialMockAssets));
             }
-        }
-        fetchData()
-    }, [])
+        };
+        loadAssets();
+    }, []);
+
+    useEffect(() => {
+        if (allAssets.length === 0) return;
+
+        // Dynamic Calculation Logic
+        const calculateStats = () => {
+            const totals = {
+                active: 0,
+                repair: 0,
+                retired: 0,
+                in_stock: 0,
+                total: allAssets.length,
+                value: 0
+            };
+
+            const segments = {};
+            const types = {};
+            const locations = {};
+
+            // Monthly Trend Buckets (Jan-Dec)
+            const monthlyTrends = Array(12).fill(0).map((_, i) => ({
+                name: new Date(0, i).toLocaleString('default', { month: 'short' }),
+                repaired: 0, // Mocked distribution
+                renewed: 0   // Based on purchase_date
+            }));
+
+            allAssets.forEach(asset => {
+                // Status Counts
+                const statusLower = asset.status.toLowerCase();
+                if (statusLower.includes('active')) totals.active++;
+                else if (statusLower.includes('repair')) totals.repair++;
+                else if (statusLower.includes('retired')) totals.retired++;
+                else if (statusLower.includes('stock')) totals.in_stock++;
+
+                // Value
+                totals.value += (asset.cost || 0);
+
+                // Segment
+                segments[asset.segment] = (segments[asset.segment] || 0) + 1;
+
+                // Type
+                types[asset.type] = (types[asset.type] || 0) + 1;
+
+                // Location - EXACT MATCH
+                locations[asset.location] = (locations[asset.location] || 0) + 1;
+
+                // Trends
+                if (asset.purchase_date) {
+                    const date = new Date(asset.purchase_date);
+                    if (!isNaN(date)) {
+                        const month = date.getMonth();
+                        monthlyTrends[month].renewed += 1;
+
+                        // Deterministic mock logic for repairs:
+                        // If asset ID is divisible by 3, pretend it was repaired 2 months after purchase (wrapping around year)
+                        if (asset.id % 3 === 0) {
+                            const repairMonth = (month + 2) % 12;
+                            monthlyTrends[repairMonth].repaired += 1;
+                        }
+                    }
+                }
+            });
+
+            // Format for Charts
+            const by_location = Object.entries(locations).map(([name, value]) => ({ name, value }));
+            const by_segment = Object.entries(segments).map(([name, value]) => ({ name, value }));
+            const by_type = Object.entries(types).map(([name, value]) => ({ name, value }));
+            const by_status = [
+                { name: 'Active', value: totals.active },
+                { name: 'Repair', value: totals.repair },
+                { name: 'Retired', value: totals.retired },
+                { name: 'In Stock', value: totals.in_stock }
+            ];
+
+            // Quarterly Aggregation
+            const quarterlyTrends = [
+                { name: 'Q1', repaired: 0, renewed: 0 },
+                { name: 'Q2', repaired: 0, renewed: 0 },
+                { name: 'Q3', repaired: 0, renewed: 0 },
+                { name: 'Q4', repaired: 0, renewed: 0 },
+            ];
+
+            monthlyTrends.forEach((m, index) => {
+                const qIndex = Math.floor(index / 3);
+                quarterlyTrends[qIndex].repaired += m.repaired;
+                quarterlyTrends[qIndex].renewed += m.renewed;
+            });
+
+            setStats({
+                total: totals.total,
+                active: totals.active,
+                repair: totals.repair,
+                warranty_risk: 5, // Mock constant
+                total_value: totals.value,
+                by_status,
+                by_segment,
+                by_type,
+                by_location,
+                trends: {
+                    monthly: monthlyTrends,
+                    quarterly: quarterlyTrends
+                }
+            });
+            setLoading(false);
+        };
+
+        calculateStats(); // Run calculations
+    }, [allAssets]);
 
     const handleExport = () => {
         if (!allAssets || allAssets.length === 0) return
@@ -331,7 +427,7 @@ export default function SystemAdminDashboard() {
                                     <Link href="/assets?sort=newest" className="text-xs text-blue-400 hover:text-blue-300 font-medium">View All</Link>
                                 </div>
                                 <div className="space-y-3">
-                                    {recentAssets.slice(0, 4).map((asset) => (
+                                    {allAssets.slice(0, 4).map((asset) => (
                                         <div key={asset.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer group">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-lg bg-blue-500/20 flex items-center justify-center text-blue-400 group-hover:bg-blue-500 group-hover:text-white transition-all">
