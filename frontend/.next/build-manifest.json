@@ -27,25 +27,10 @@
       "static/chunks/main.js",
       "static/chunks/pages/_error.js"
     ],
-    "/assets/[id]/cmdb": [
-      "static/chunks/webpack.js",
-      "static/chunks/main.js",
-      "static/chunks/pages/assets/[id]/cmdb.js"
-    ],
     "/dashboard/[role]": [
       "static/chunks/webpack.js",
       "static/chunks/main.js",
       "static/chunks/pages/dashboard/[role].js"
-    ],
-    "/enterprise-features": [
-      "static/chunks/webpack.js",
-      "static/chunks/main.js",
-      "static/chunks/pages/enterprise-features.js"
-    ],
-    "/financials": [
-      "static/chunks/webpack.js",
-      "static/chunks/main.js",
-      "static/chunks/pages/financials.js"
     ]
   },
   "ampFirstPages": []

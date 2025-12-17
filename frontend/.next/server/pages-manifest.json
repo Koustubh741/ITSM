@@ -2,9 +2,6 @@
   "/_app": "pages/_app.js",
   "/_error": "pages/_error.js",
   "/_document": "pages/_document.js",
-  "/enterprise-features": "pages/enterprise-features.js",
-  "/financials": "pages/financials.js",
   "/": "pages/index.js",
-  "/dashboard/[role]": "pages/dashboard/[role].js",
-  "/assets/[id]/cmdb": "pages/assets/[id]/cmdb.js"
+  "/dashboard/[role]": "pages/dashboard/[role].js"
 }
