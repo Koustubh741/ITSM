@@ -39,20 +39,10 @@ export default function AuthGuard({ children }) {
                     // Allow access to login page even if authenticated (User Request)
                     setAuthorized(true);
                 } else {
-                    // Check if on a dashboard route, does it match role?
-                    if (currentPath.startsWith('/dashboard/')) {
-                        const expectedPath = ROLE_DASHBOARD_MAP[currentRole.label];
-
-                        if (expectedPath && currentPath !== expectedPath) {
-                            // Wrong dashboard for role
-                            router.push(expectedPath);
-                        } else {
-                            setAuthorized(true);
-                        }
-                    } else {
-                        // Allow other pages
-                        setAuthorized(true);
-                    }
+                    // ALLOW current route. 
+                    // Do NOT redirect even if it doesn't match the "default" dashboard for the role.
+                    // This fixes the reload issue where it forces you back to default.
+                    setAuthorized(true);
                 }
             }
         };

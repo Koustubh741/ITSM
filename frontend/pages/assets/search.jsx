@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { ArrowLeft, Save } from 'lucide-react';
@@ -8,37 +9,74 @@ import SavedViewsDrawer from '@/components/SavedViewsDrawer' // Will create next
 
 export default function SmartSearchPage() {
     // Generate Mock Data
-    const generateMockAssets = (count) => {
-        const types = ['Laptop', 'Desktop', 'Monitor', 'Server', 'Phone'];
-        const statuses = ['Active', 'In Stock', 'Repair', 'Retired'];
-        const depts = ['IT', 'HR', 'Engineering', 'Sales', 'Finance'];
-
-        return Array.from({ length: count }).map((_, i) => ({
-            id: `AST-${1000 + i}`,
-            name: `${types[i % types.length]} ${1000 + i}`,
-            serial_number: `SN-${Math.random().toString(36).substr(2, 8).toUpperCase()}`,
-            segment: i % 3 === 0 ? 'NON-IT' : 'IT',
-            type: types[i % types.length],
-            status: statuses[i % statuses.length],
-            assigned_to: i % 2 === 0 ? `User ${i}` : null,
-            assigned_by: 'Admin',
-            location: ['New York', 'London', 'Remote', 'Singapore'][i % 4],
-            category: types[i % types.length], // Mapping type to category for filter
-            department: depts[i % depts.length],
-            warranty_expiry: new Date(new Date().setDate(new Date().getDate() + (i * 10 - 100))).toISOString().split('T')[0]
-        }));
-    };
-
     const [assets, setAssets] = useState([]);
     const [filteredAssets, setFilteredAssets] = useState([]);
     const [isSavedViewOpen, setIsSavedViewOpen] = useState(false);
+    const [currentFilters, setCurrentFilters] = useState(null);
 
     useEffect(() => {
-        // Load mock data on mount
-        const data = generateMockAssets(50);
-        setAssets(data);
-        setFilteredAssets(data);
+        // Load assets from localStorage or fallback to initialMockAssets to match main inventory
+        const savedAssets = localStorage.getItem('assets');
+        const enrichData = (data) => {
+            return data.map(asset => {
+                // Enrich with Department if missing
+                let dept = asset.department;
+                if (!dept) {
+                    if (asset.segment === 'IT') dept = 'IT';
+                    else if (asset.location?.includes('Reception')) dept = 'Admin';
+                    else dept = ['Engineering', 'Sales', 'HR', 'Finance'][Math.floor(Math.random() * 4)];
+                }
+
+                // Enrich with Warranty if missing
+                let warranty = asset.warranty_expiry;
+                if (!warranty) {
+                    // Random date between 1 month ago and 2 years in future
+                    const date = new Date();
+                    date.setDate(date.getDate() + Math.floor(Math.random() * 730) - 30);
+                    warranty = date.toISOString().split('T')[0];
+                }
+
+                return { ...asset, department: dept, warranty_expiry: warranty };
+            });
+        };
+
+        if (savedAssets) {
+            const parsed = JSON.parse(savedAssets);
+            const enriched = enrichData(parsed);
+            setAssets(enriched);
+            setFilteredAssets(enriched);
+        } else {
+            const { initialMockAssets } = require('@/data/mockAssets');
+            const enriched = enrichData(initialMockAssets);
+            setAssets(enriched);
+            setFilteredAssets(enriched);
+        }
     }, []);
+
+    const router = useRouter();
+
+    // Effect to apply filters from URL query params
+    useEffect(() => {
+        if (!router.isReady || assets.length === 0) return;
+
+        const { status, category, department, warranty, search } = router.query;
+
+        // Construct initial filters based on URL or defaults
+        const initialFilters = {
+            status: status || 'All',
+            category: category || 'All',
+            department: department || 'All',
+            warranty: warranty || 'All',
+            search: search || ''
+        };
+
+        // We need to update the FilterBar UI as well, but for now let's just filter the results
+        // Ideally SmartFiltersBar should take `initialFilters` prop. 
+        // For this fix, we just run the filter logic.
+        setCurrentFilters(initialFilters);
+        handleFilterChange(initialFilters);
+
+    }, [router.isReady, router.query, assets]);
 
     const handleFilterChange = (filters) => {
         let result = [...assets];
@@ -113,6 +151,7 @@ export default function SmartSearchPage() {
                 <SmartFiltersBar
                     onFilterChange={handleFilterChange}
                     onSaveView={handleSaveView}
+                    initialFilters={currentFilters}
                 />
             </div>
 

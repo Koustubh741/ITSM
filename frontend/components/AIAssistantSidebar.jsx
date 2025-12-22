@@ -27,21 +27,81 @@ export default function AIAssistantSidebar({ isOpen, onClose }) {
         setIsTyping(true);
 
         // Mock AI Delay and Response
+        // AI Logic with Real Data
         setTimeout(() => {
-            let response = "I'm not sure about that, but I can check the database.";
-            if (userMsg.toLowerCase().includes('warranty')) {
-                response = "I found 5 assets with warranties expiring this month. Would you like me to create renewal tickets for them?";
-            } else if (userMsg.toLowerCase().includes('spend') || userMsg.toLowerCase().includes('cost')) {
-                response = "Current YTD spend is $450,000. This is 12% higher than last year. The main cost driver is Hardware procurement.";
-            } else if (userMsg.toLowerCase().includes('audit')) {
-                response = "The last audit for 'New York Office' was completed on Nov 20th with 98% compliance.";
-            } else if (userMsg.toLowerCase().includes('ticket')) {
-                response = "You have 14 open tickets. The highest priority is 'Laptop Screen Flicker' assigned to Sarah Connor.";
+            let response = "I'm not sure about that. Try asking about 'total count', 'warranties', or 'spending'.";
+            const lowerInput = userMsg.toLowerCase();
+
+            // 1. Fetch Data
+            const savedAssets = localStorage.getItem('assets');
+            let assets = savedAssets ? JSON.parse(savedAssets) : [];
+
+            // Fallback to mock data if empty (ensures AI always works)
+            if (assets.length === 0) {
+                const { initialMockAssets } = require('@/data/mockAssets');
+                assets = initialMockAssets;
+            }
+
+            // 2. Intent Parsing - Enhanced
+            const isCountQuery = lowerInput.includes('count') || lowerInput.includes('how many') || lowerInput.includes('number of') || lowerInput.includes('total') || lowerInput.includes('list');
+
+            if (isCountQuery) {
+                const total = assets.length;
+
+                // Specific Type Counts
+                if (lowerInput.includes('it assets') || lowerInput.includes('it segment')) {
+                    const itCount = assets.filter(a => a.segment === 'IT').length;
+                    response = `You have ${itCount} IT assets in your inventory.`;
+                }
+                else if (lowerInput.includes('non-it') || lowerInput.includes('furniture')) {
+                    const nonItCount = assets.filter(a => a.segment === 'NON-IT').length;
+                    response = `You have ${nonItCount} Non-IT assets (Furniture, etc.) in your inventory.`;
+                }
+                else if (lowerInput.includes('laptop')) {
+                    const count = assets.filter(a => a.type.toLowerCase().includes('laptop')).length;
+                    response = `You have ${count} laptops in your inventory.`;
+                }
+                else if (lowerInput.includes('desktop') || lowerInput.includes('computer')) {
+                    const count = assets.filter(a => a.type.toLowerCase().includes('desktop')).length;
+                    response = `You have ${count} desktop computers in your inventory.`;
+                }
+                else if (lowerInput.includes('monitor')) {
+                    const count = assets.filter(a => a.type.toLowerCase().includes('monitor')).length;
+                    response = `You have ${count} monitors in your inventory.`;
+                }
+                else if (lowerInput.includes('printer')) {
+                    const count = assets.filter(a => a.type.toLowerCase().includes('printer')).length;
+                    response = `You have ${count} printers in your inventory.`;
+                }
+                else {
+                    response = `You have a total of ${total} assets in the system.`;
+                }
+            }
+            else if (lowerInput.includes('warranty') || lowerInput.includes('expir')) {
+                const today = new Date();
+                const expiring = assets.filter(a => {
+                    if (!a.warranty_expiry) return false;
+                    const d = new Date(a.warranty_expiry);
+                    return d > today && d < new Date(today.getFullYear(), today.getMonth() + 2, 1); // Next 2 months
+                });
+                response = `I found ${expiring.length} assets with warranties expiring soon (in the next 60 days).`;
+            }
+            else if (lowerInput.includes('cost') || lowerInput.includes('value') || lowerInput.includes('spend') || lowerInput.includes('worth')) {
+                const totalValue = assets.reduce((sum, a) => sum + (Number(a.cost) || 0), 0);
+                response = `The total value of your asset inventory is ₹${totalValue.toLocaleString()}.`;
+            }
+            else if (lowerInput.includes('user') || lowerInput.includes('assigned') || lowerInput.includes('people')) {
+                const assignedCount = assets.filter(a => a.assigned_to && a.assigned_to !== 'Unassigned').length;
+                response = `${assignedCount} out of ${assets.length} assets are currently assigned to users.`;
+            }
+            else if (lowerInput.includes('repair') || lowerInput.includes('broken') || lowerInput.includes('damage')) {
+                const repairs = assets.filter(a => a.status === 'Repair').length;
+                response = `There are currently ${repairs} assets marked for Repair.`;
             }
 
             setMessages(prev => [...prev, { role: 'assistant', text: response }]);
             setIsTyping(false);
-        }, 1500);
+        }, 800);
     };
 
     return (
@@ -75,8 +135,8 @@ export default function AIAssistantSidebar({ isOpen, onClose }) {
                     {messages.map((m, i) => (
                         <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                             <div className={`max-w-[85%] rounded-2xl p-4 ${m.role === 'user'
-                                    ? 'bg-blue-600 text-white rounded-br-none'
-                                    : 'bg-white/5 border border-white/10 text-slate-200 rounded-bl-none'
+                                ? 'bg-blue-600 text-white rounded-br-none'
+                                : 'bg-white/5 border border-white/10 text-slate-200 rounded-bl-none'
                                 }`}>
                                 <p className="text-sm leading-relaxed">{m.text}</p>
                             </div>

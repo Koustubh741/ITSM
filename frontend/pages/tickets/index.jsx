@@ -6,15 +6,66 @@ import { useState, useEffect } from 'react';
 export default function TicketsDashboard() {
     const [stats, setStats] = useState({ open: 0, pending: 0, closed: 0 });
     const [recentTickets, setRecentTickets] = useState([]);
+    const [isKBSearchOpen, setIsKBSearchOpen] = useState(false);
+    const [kbQuery, setKbQuery] = useState('');
+    const [selectedArticle, setSelectedArticle] = useState(null);
+
+    const kbArticles = [
+        { id: 1, title: 'How to request a new laptop', category: 'Hardware', content: 'To request a new laptop, please submit a ticket with the subject "Hardware Request". Include your department and reason for the upgrade. Approval from your manager is required.' },
+        { id: 2, title: 'VPN connection issues', category: 'Network', content: 'If you are unable to connect to the VPN, try restarting your router. If the issue persists, check if your credentials are expired. Contact IT support if you see Error 800.' },
+        { id: 3, title: 'Resetting your password', category: 'Account', content: 'Go to the IDM portal and click "Forgot Password". You will receive an OTP on your registered mobile number. Follow the instructions to set a new secure password.' },
+        { id: 4, title: 'Software license request process', category: 'Software', content: 'All paid software requires a license. Check the "Approved Software List" first. If listed, raise a "Software License" ticket. If new software, a security audit is needed first.' },
+        { id: 5, title: 'Printer troubleshooting guide', category: 'Hardware', content: '1. Check if printer is ON.\n2. Ensure paper tray is full.\n3. Restart the printer.\n4. Clear any paper jams.\nIf these steps fail, log a ticket with the printer model number.' },
+    ];
+
+    const filteredArticles = kbArticles.filter(a => a.title.toLowerCase().includes(kbQuery.toLowerCase()));
 
     useEffect(() => {
-        // Mock Data Load
-        setStats({ open: 14, pending: 5, closed: 128 });
-        setRecentTickets([
-            { id: 'TCK-2023-001', subject: 'Laptop Screen Flicker', priority: 'High', status: 'Open', user: 'Sarah Connor', created: '2023-12-10' },
-            { id: 'TCK-2023-002', subject: 'Software Install Request', priority: 'Low', status: 'Pending', user: 'Kyle Reese', created: '2023-12-09' },
-            { id: 'TCK-2023-003', subject: 'Keyboard Replacement', priority: 'Medium', status: 'Closed', user: 'T-800', created: '2023-12-08' },
-        ]);
+        // Load Data to match AllTicketsPage logic
+        const savedAssets = localStorage.getItem('assets');
+        let assetList = [];
+        if (savedAssets) assetList = JSON.parse(savedAssets);
+        else {
+            const { initialMockAssets } = require('@/data/mockAssets');
+            assetList = initialMockAssets;
+        }
+
+        // 1. Real Status Tickets
+        const realTickets = assetList
+            .filter(a => a.status === 'Repair' || a.status === 'Maintenance')
+            .map((a, i) => ({
+                id: `TCK-${202300 + i}`,
+                subject: `${a.status} Request: ${a.name}`,
+                priority: a.status === 'Repair' ? 'High' : 'Medium',
+                status: 'Open',
+                user: a.assigned_to || 'System',
+                created: '2023-12-20'
+            }));
+
+        // 2. Random Mock Tickets (Same logic as AllTicketsPage)
+        const randomTickets = Array.from({ length: 15 }).map((_, i) => {
+            const randomAsset = assetList[Math.floor(Math.random() * assetList.length)];
+            const statuses = ['Open', 'Pending', 'Closed'];
+            return {
+                id: `TCK-GEN-${100 + i}`,
+                subject: `Issue with ${randomAsset?.name || 'Hardware'}`,
+                priority: ['Low', 'Medium', 'High'][i % 3],
+                status: statuses[i % 3],
+                user: randomAsset?.assigned_to || 'User',
+                created: '2023-12-15'
+            };
+        });
+
+        const allTickets = [...realTickets, ...randomTickets];
+
+        // Calc Stats
+        const counts = {
+            open: allTickets.filter(t => t.status === 'Open').length,
+            pending: allTickets.filter(t => t.status === 'Pending').length,
+            closed: allTickets.filter(t => t.status === 'Closed').length
+        };
+        setStats(counts);
+        setRecentTickets(allTickets.slice(0, 3)); // Show first 3 as recent
     }, []);
 
     const getPriorityColor = (p) => {
@@ -55,7 +106,7 @@ export default function TicketsDashboard() {
                             </div>
                         </div>
                     </Link>
-                    <div className="glass-panel p-6 rounded-2xl bg-white/5 border border-white/10">
+                    <Link href="/tickets/all?status=Pending" className="glass-panel p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-orange-500/30 hover:bg-white/10 transition-all cursor-pointer">
                         <div className="flex items-center gap-4">
                             <div className="p-3 rounded-xl bg-orange-500/10 text-orange-400">
                                 <Clock size={24} />
@@ -65,8 +116,8 @@ export default function TicketsDashboard() {
                                 <div className="text-sm text-slate-400">Pending Actions</div>
                             </div>
                         </div>
-                    </div>
-                    <div className="glass-panel p-6 rounded-2xl bg-white/5 border border-white/10">
+                    </Link>
+                    <Link href="/tickets/all?status=Closed" className="glass-panel p-6 rounded-2xl bg-white/5 border border-white/10 hover:border-emerald-500/30 hover:bg-white/10 transition-all cursor-pointer">
                         <div className="flex items-center gap-4">
                             <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400">
                                 <CheckCircle size={24} />
@@ -76,7 +127,7 @@ export default function TicketsDashboard() {
                                 <div className="text-sm text-slate-400">Closed This Month</div>
                             </div>
                         </div>
-                    </div>
+                    </Link>
                 </div>
 
                 {/* Recent Tickets Section */}
@@ -120,13 +171,80 @@ export default function TicketsDashboard() {
                         <div className="p-6 rounded-2xl bg-gradient-to-br from-rose-900/20 to-purple-900/20 border border-white/10">
                             <h3 className="font-bold text-lg mb-2">Need Help?</h3>
                             <p className="text-sm text-slate-400 mb-4">Check the knowledge base for common asset issues before raising a ticket.</p>
-                            <button className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium transition-colors">
+                            <button
+                                onClick={() => setIsKBSearchOpen(true)}
+                                className="w-full py-2 bg-white/10 hover:bg-white/20 rounded-xl text-sm font-medium transition-colors"
+                            >
                                 Search Knowledge Base
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+
+            {/* KB Modal */}
+            {
+                isKBSearchOpen && (
+                    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="w-full max-w-lg bg-slate-900 border border-white/10 rounded-2xl p-6 shadow-2xl relative">
+                            <button
+                                onClick={() => setIsKBSearchOpen(false)}
+                                className="absolute top-4 right-4 text-slate-400 hover:text-white"
+                            >
+                                <Plus size={24} className="rotate-45" />
+                            </button>
+
+                            <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                <div className="p-2 bg-rose-500/20 text-rose-400 rounded-lg"><Ticket size={20} /></div>
+                                Knowledge Base
+                            </h3>
+
+                            <input
+                                type="text"
+                                placeholder="Search help articles..."
+                                className="w-full bg-slate-950 border border-white/10 rounded-xl px-4 py-3 mb-4 text-white focus:outline-none focus:ring-2 focus:ring-rose-500/50"
+                                value={kbQuery}
+                                onChange={(e) => setKbQuery(e.target.value)}
+                                autoFocus
+                            />
+
+                            {selectedArticle ? (
+                                <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                                    <button
+                                        onClick={() => setSelectedArticle(null)}
+                                        className="text-sm text-slate-400 hover:text-white flex items-center gap-1 mb-4"
+                                    >
+                                        <ArrowLeft size={16} /> Back to search
+                                    </button>
+                                    <h4 className="font-bold text-xl text-white mb-2">{selectedArticle.title}</h4>
+                                    <span className="text-xs text-rose-400 font-mono mb-4 block">{selectedArticle.category}</span>
+                                    <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-line">
+                                        {selectedArticle.content}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                                    {filteredArticles.map(article => (
+                                        <div
+                                            key={article.id}
+                                            className="p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors cursor-pointer group"
+                                            onClick={() => setSelectedArticle(article)}
+                                        >
+                                            <h4 className="font-medium text-slate-200 group-hover:text-rose-300">{article.title}</h4>
+                                            <span className="text-xs text-slate-500 uppercase tracking-wider">{article.category}</span>
+                                        </div>
+                                    ))}
+                                    {filteredArticles.length === 0 && (
+                                        <div className="text-center text-slate-500 py-8">
+                                            No articles found.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }

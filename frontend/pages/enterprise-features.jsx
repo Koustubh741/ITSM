@@ -46,15 +46,7 @@ export default function EnterpriseFeatures() {
             bg: "bg-emerald-400/10",
             border: "border-emerald-400/20"
         },
-        {
-            title: "Asset Audit",
-            description: "Start and manage asset audits with a guided workflow.",
-            icon: ClipboardCheck,
-            href: "/audit/overview",
-            color: "text-orange-400",
-            bg: "bg-orange-400/10",
-            border: "border-orange-400/20"
-        },
+
         {
             title: "Ticketing System",
             description: "Manage support tickets and service requests.",
@@ -82,15 +74,7 @@ export default function EnterpriseFeatures() {
             bg: "bg-pink-400/10",
             border: "border-pink-400/20"
         },
-        {
-            title: "Financial Center",
-            description: "Spend analysis, depreciation graphs, and cost projections.",
-            icon: DollarSign,
-            href: "/financials",
-            color: "text-yellow-400",
-            bg: "bg-yellow-400/10",
-            border: "border-yellow-400/20"
-        },
+
         {
             title: "AI Assistant",
             description: "Intelligent sidekick for asset queries.",
@@ -113,9 +97,7 @@ export default function EnterpriseFeatures() {
                         </h1>
                         <p className="text-slate-400 text-lg">
                             Access the new enterprise-grade modules and tools.
-                            <span className="ml-2 text-xs bg-slate-800 text-slate-300 px-2 py-1 rounded border border-white/10">
-                                Mock Data Mode
-                            </span>
+
                         </p>
                     </div>
                     <button

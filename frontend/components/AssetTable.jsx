@@ -4,7 +4,8 @@ import { MoreVertical, Eye, Edit, UserPlus } from 'lucide-react'
 export default function AssetTable({ assets }) {
     const getStatusColor = (status) => {
         switch (status) {
-            case 'Active': return 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20'
+            case 'In Use': return 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20'
+            case 'Active': return 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20' // Treat Active as In Use
             case 'In Stock': return 'bg-blue-500/10 text-blue-400 ring-blue-500/20'
             case 'Repair': return 'bg-orange-500/10 text-orange-400 ring-orange-500/20'
             case 'Retired': return 'bg-slate-500/10 text-slate-400 ring-slate-500/20'
@@ -46,8 +47,13 @@ export default function AssetTable({ assets }) {
                             <td className="px-6 py-4 text-slate-300 font-medium">{asset.type}</td>
                             <td className="px-6 py-4">
                                 <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ring-inset ${getStatusColor(asset.status)}`}>
-                                    {asset.status}
+                                    {asset.status === 'Active' ? 'In Use' : asset.status}
                                 </span>
+                                {asset.warranty_expiry && new Date(asset.warranty_expiry) <= new Date(new Date().setDate(new Date().getDate() + 30)) && new Date(asset.warranty_expiry) >= new Date() && (
+                                    <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30" title="Warranty Expiring">
+                                        WAR
+                                    </span>
+                                )}
                             </td>
                             <td className="px-6 py-4 text-slate-300 font-mono">
                                 ₹{asset.cost ? asset.cost.toLocaleString() : '0'}

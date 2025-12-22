@@ -74,7 +74,13 @@ export default function SavedViewsPage() {
                     {filteredViews.length > 0 ? filteredViews.map(view => (
                         <div key={view.id} className="group relative bg-slate-900/40 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-300">
                             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <Link href="/assets/search" className="p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-lg text-xs font-semibold flex items-center gap-1">
+                                <Link
+                                    href={{
+                                        pathname: '/assets/search',
+                                        query: view.filters,
+                                    }}
+                                    className="p-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg shadow-lg text-xs font-semibold flex items-center gap-1"
+                                >
                                     Open <ArrowLeft size={12} className="rotate-180" />
                                 </Link>
                             </div>

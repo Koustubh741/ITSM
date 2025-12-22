@@ -1,100 +1,424 @@
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, Server, Monitor, Globe, Shield, Wifi, Database } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import {
+    ArrowLeft, Server, Database, Globe, Shield, Wifi, Monitor,
+    Briefcase, AlertTriangle, CheckCircle, Activity, Play, RefreshCw, XCircle,
+    Info, Layers, Zap
+} from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
 
 export default function CMDBMapPage() {
     const router = useRouter();
     const { id } = router.query;
 
-    // Mock Nodes
-    const [nodes, setNodes] = useState([]);
+    // --- STATE ---
+    const [viewMode, setViewMode] = useState('standard'); // 'standard', 'impact', 'risk'
+    const [showBusinessLayer, setShowBusinessLayer] = useState(false);
+    const [selectedNode, setSelectedNode] = useState(null);
+    const [simulatingChange, setSimulatingChange] = useState(false);
 
-    useEffect(() => {
-        if (!id) return;
-        // Mock Relationship Data
-        setNodes([
-            { id: 'root', type: 'Server', name: `Primary Asset (${id})`, status: 'Active', x: 400, y: 300, icon: Server, main: true },
-            { id: 'c1', type: 'Database', name: 'PostgreSQL DB', status: 'Active', x: 400, y: 150, icon: Database },
-            { id: 'c2', type: 'Network', name: 'Core Switch', status: 'Active', x: 200, y: 300, icon: Wifi },
-            { id: 'c3', type: 'Service', name: 'Auth Service', status: 'Warning', x: 600, y: 300, icon: Shield },
-            { id: 'c4', type: 'App', name: 'Web Frontend', status: 'Active', x: 400, y: 450, icon: Globe },
-            { id: 'c5', type: 'Users', name: 'End Users', status: 'Active', x: 600, y: 450, icon: Monitor },
-        ]);
+    // --- MOCK DATA GENERATOR ---
+    // In a real app, this would be an API call fetching the graph for asset `id`
+    const initialGraph = useMemo(() => {
+        const baseNodes = [
+            { id: 'root', type: 'Server', name: `Primary Asset (${id})`, status: 'Active', x: 400, y: 350, icon: Server, main: true, layer: 'tech' },
+            { id: 'db-01', type: 'Database', name: 'PostgreSQL DB', status: 'Active', x: 200, y: 350, icon: Database, layer: 'tech' },
+            { id: 'net-01', type: 'Network', name: 'Core Switch', status: 'Active', x: 400, y: 500, icon: Wifi, layer: 'tech' },
+            { id: 'svc-auth', type: 'Service', name: 'Auth Service', status: 'Active', x: 600, y: 350, icon: Shield, layer: 'tech' },
+            { id: 'svc-app', type: 'App', name: 'Web Frontend', status: 'Warning', x: 400, y: 200, icon: Globe, layer: 'tech' },
+            { id: 'user-group', type: 'Users', name: 'End Users', status: 'Active', x: 600, y: 200, icon: Monitor, layer: 'tech' },
+        ];
+
+        const businessNodes = [
+            { id: 'biz-fin', type: 'Business', name: 'Finance System', status: 'Active', x: 250, y: 80, icon: Briefcase, layer: 'biz' },
+            { id: 'biz-hr', type: 'Business', name: 'HR Portal', status: 'Active', x: 550, y: 80, icon: Briefcase, layer: 'biz' },
+        ];
+
+        // Edges: source -> target (Dependency Direction: source depends on target, or flow?)
+        // Let's define: Source IMPACTS Target. (Failure in Source -> Failure in Target)
+        // Root (Server) -> Hosts -> App
+        // DB -> Supports -> App
+        // Switch -> Connects -> Root
+        // App -> Served To -> Users
+        // App -> Supports -> Business Functions
+
+        const baseEdges = [
+            { source: 'net-01', target: 'root', type: 'Connects', label: 'Uplink' },
+            { source: 'db-01', target: 'svc-app', type: 'Supports', label: 'Data' },
+            { source: 'root', target: 'svc-app', type: 'Hosts', label: 'Runtime' },
+            { source: 'svc-auth', target: 'svc-app', type: 'Secures', label: 'Auth' },
+            { source: 'svc-app', target: 'user-group', type: 'Serves', label: 'Access' },
+        ];
+
+        const bizEdges = [
+            { source: 'svc-app', target: 'biz-fin', type: 'Powers', label: 'Critical' },
+            { source: 'svc-app', target: 'biz-hr', type: 'Powers', label: 'Standard' },
+        ];
+
+        return { baseNodes, businessNodes, baseEdges, bizEdges };
     }, [id]);
 
-    const getStatusColor = (s) => s === 'Active' ? 'text-emerald-400 border-emerald-500/50 shadow-emerald-500/20' : 'text-orange-400 border-orange-500/50 shadow-orange-500/20';
+
+    // --- DERIVED STATE ---
+    const visibleNodes = useMemo(() => {
+        return showBusinessLayer
+            ? [...initialGraph.baseNodes, ...initialGraph.businessNodes]
+            : initialGraph.baseNodes;
+    }, [showBusinessLayer, initialGraph]);
+
+    const visibleEdges = useMemo(() => {
+        return showBusinessLayer
+            ? [...initialGraph.baseEdges, ...initialGraph.bizEdges]
+            : initialGraph.baseEdges;
+    }, [showBusinessLayer, initialGraph]);
+
+
+    // --- LOGIC ENGINES ---
+
+    // 1. INCIDENT IMPACT LOGIC (DFS Propagation)
+    // Returns a Set of Node IDs that are "Downstream" (impacted) by the selected node.
+    const impactedNodes = useMemo(() => {
+        if (viewMode !== 'impact' || !selectedNode) return new Set();
+
+        const impacted = new Set();
+        const stack = [selectedNode];
+
+        while (stack.length > 0) {
+            const current = stack.pop();
+            if (impacted.has(current)) continue;
+            impacted.add(current);
+
+            // Find all edges where 'current' is the SOURCE (since Source Impacts Target in our definition)
+            // Wait, standard dependency: "App depends on DB". If DB fails, App fails.
+            // Edge: DB -> App (DB impacts App). Yes.
+            const downstream = visibleEdges
+                .filter(e => e.source === current)
+                .map(e => e.target);
+
+            stack.push(...downstream);
+        }
+
+        return impacted;
+    }, [viewMode, selectedNode, visibleEdges]);
+
+    // 2. CHANGE RISK LOGIC
+    // Calculates simple risk score based on downstream count
+    const changeRisk = useMemo(() => {
+        if (viewMode !== 'risk' || !simulatingChange || !selectedNode) return null;
+
+        // Reuse propagation logic to find all dependencies
+        const impacted = new Set();
+        const stack = [selectedNode];
+        while (stack.length > 0) {
+            const current = stack.pop();
+            if (impacted.has(current)) continue;
+            impacted.add(current);
+            const downstream = visibleEdges.filter(e => e.source === current).map(e => e.target);
+            stack.push(...downstream);
+        }
+
+        const impactedCount = impacted.size - 1; // Exclude self
+        const userImpact = impacted.has('user-group');
+        const bizImpact = [...impacted].some(nid => nid.startsWith('biz-'));
+
+        let score = 'Low';
+        if (impactedCount > 2 || userImpact) score = 'Medium';
+        if (bizImpact || impactedCount > 4) score = 'High';
+
+        return { score, count: impactedCount, userImpact, bizImpact };
+    }, [viewMode, simulatingChange, selectedNode, visibleEdges]);
+
+
+    // --- HELPERS ---
+    const getNodeColor = (node) => {
+        // Mode: IMPACT
+        if (viewMode === 'impact' && selectedNode) {
+            if (node.id === selectedNode) return 'ring-4 ring-red-500 bg-slate-900 border-red-500'; // Origin
+            if (impactedNodes.has(node.id)) return 'ring-2 ring-orange-500 bg-slate-900 border-orange-500 animate-pulse'; // Impacted
+            return 'opacity-20 grayscale bg-slate-950 border-slate-800'; // Unaffected
+        }
+
+        // Mode: RISK
+        if (viewMode === 'risk' && simulatingChange && selectedNode) {
+            if (node.id === selectedNode) return 'ring-4 ring-amber-400 bg-amber-900/20 border-amber-400'; // Change Target
+            // Highlight downstream as "At Risk"
+            const uniqueKey = changeRisk; // trigger ref trigger
+            // Re-using logic implicitly via UI render cycle, but for color:
+            // Since `changeRisk` is calculated, we can check basic membership if we exported the Set, 
+            // but for now let's just re-check if we want perfect styling, or simplistic 'affected'
+            // Let's do a simple check: is it in the downstream path?
+            if (node.id !== selectedNode) {
+                // Cheap recalc for color (optimization: lift state up if needed)
+                // Or just trust the `impactedNodes` set? 
+                // Actually `impactedNodes` is driven by `viewMode==='impact'`.
+                // Let's make `impactedNodes` broader or use a separate set `riskNodes`.
+                // For now, simple fallback:
+                return 'opacity-30 grayscale';
+            }
+        }
+
+        // STANDARD
+        if (node.status === 'Critical') return 'border-red-500 shadow-red-500/20 text-red-400';
+        if (node.status === 'Warning') return 'border-orange-500 shadow-orange-500/20 text-orange-400';
+        return 'border-emerald-500 shadow-emerald-500/20 text-emerald-400';
+    };
+
+    const handleNodeClick = (id) => {
+        if (viewMode === 'standard') return; // Maybe open details?
+        setSelectedNode(id === selectedNode ? null : id);
+        if (viewMode === 'risk') setSimulatingChange(true);
+    };
 
     return (
-        <div className="min-h-screen p-8 bg-slate-950 text-slate-100 overflow-hidden">
-            <div className="max-w-7xl mx-auto h-full flex flex-col">
-                <div className="flex items-center space-x-4 mb-8">
-                    <Link href="/enterprise-features" className="p-2 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-colors">
-                        <ArrowLeft size={24} />
-                    </Link>
+        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
+            {/* --- TOP BAR --- */}
+            <div className="border-b border-white/10 bg-slate-900/50 backdrop-blur-md px-8 py-4 flex items-center justify-between z-20">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => window.history.length > 1 ? router.back() : router.push('/enterprise-features')}
+                        className="p-2 hover:bg-white/10 rounded-lg transition-colors text-slate-400 hover:text-white"
+                    >
+                        <ArrowLeft size={20} />
+                    </button>
                     <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">CMDB Relationship Visualizer</h1>
-                        <p className="text-slate-400 mt-1">Dependency Mapping & Impact Analysis</p>
+                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Activity className="text-blue-500" size={20} />
+                            CMDB Visualizer
+                        </h1>
+                        <p className="text-xs text-slate-400 font-mono">Topology & Impact Analysis</p>
                     </div>
                 </div>
 
-                <div className="flex-1 glass-panel rounded-2xl bg-slate-900 border border-white/10 relative min-h-[600px] overflow-hidden">
-                    {/* Background Grid */}
-                    <div className="absolute inset-0" style={{
-                        backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.05) 1px, transparent 1px)',
-                        backgroundSize: '30px 30px'
-                    }} />
-
-                    {/* Nodes - Simplified layout without heavy graph lib */}
-                    {nodes.map(node => (
-                        <div
-                            key={node.id}
-                            className={`absolute transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer transition-all duration-300 hover:scale-110 z-10`}
-                            style={{ left: node.x, top: node.y }}
+                {/* --- CONTROLS --- */}
+                <div className="flex items-center gap-4">
+                    {/* View Toggles */}
+                    <div className="bg-slate-800 p-1 rounded-lg flex border border-white/5">
+                        <button
+                            onClick={() => { setViewMode('standard'); setSelectedNode(null); setSimulatingChange(false); }}
+                            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === 'standard' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
                         >
-                            <div className={`p-4 rounded-2xl bg-slate-950 border-2 shadow-lg hover:shadow-2xl transition-all ${getStatusColor(node.status)} ${node.main ? 'scale-125 ring-2 ring-white/20' : ''}`}>
-                                <node.icon size={node.main ? 32 : 24} />
-                            </div>
-                            <div className="mt-3 px-3 py-1 bg-slate-900/80 backdrop-blur-md rounded-full border border-white/10 text-xs font-medium whitespace-nowrap">
-                                {node.name}
-                            </div>
-                            {/* Connections (Manual SVG lines would be better but keeping simple for React DOM) */}
-                        </div>
-                    ))}
+                            Standard
+                        </button>
+                        <button
+                            onClick={() => { setViewMode('impact'); setSelectedNode(null); }}
+                            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === 'impact' ? 'bg-red-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Incident Impact
+                        </button>
+                        <button
+                            onClick={() => { setViewMode('risk'); setSelectedNode(null); setSimulatingChange(false); }}
+                            className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === 'risk' ? 'bg-amber-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                        >
+                            Change Risk
+                        </button>
+                    </div>
 
-                    {/* SVG Layer for Lines */}
-                    <svg className="absolute inset-0 pointer-events-none w-full h-full opacity-30">
-                        {nodes.slice(1).map((node, i) => (
-                            <line
-                                key={i}
-                                x1={nodes[0].x} // Connecting all to root for demo
-                                y1={nodes[0].y}
-                                x2={node.x}
-                                y2={node.y}
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                className="text-slate-500"
-                                strokeDasharray="5,5"
-                            />
-                        ))}
+                    <div className="h-6 w-px bg-white/10 mx-2"></div>
+
+                    <button
+                        onClick={() => setShowBusinessLayer(!showBusinessLayer)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold border transition-all ${showBusinessLayer ? 'bg-purple-500/20 border-purple-500 text-purple-400' : 'bg-slate-800 border-white/10 text-slate-400 hover:text-white'}`}
+                    >
+                        <Briefcase size={14} />
+                        Business View
+                    </button>
+                </div>
+            </div>
+
+            {/* --- MAIN CANVAS --- */}
+            <div className="flex-1 relative overflow-hidden bg-[#0B1120]">
+                {/* Background Grid */}
+                <div className="absolute inset-0 z-0" style={{
+                    backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)',
+                    backgroundSize: '40px 40px'
+                }} />
+
+                {/* HELPER BANNER */}
+                {viewMode === 'impact' && !selectedNode && (
+                    <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 bg-red-500/10 border border-red-500/20 text-red-200 px-6 py-2 rounded-full backdrop-blur-md animate-bounce-slow text-sm font-medium">
+                        Select a node to simulate component failure
+                    </div>
+                )}
+                {viewMode === 'risk' && !selectedNode && (
+                    <div className="absolute top-6 left-1/2 -translate-x-1/2 z-30 bg-amber-500/10 border border-amber-500/20 text-amber-200 px-6 py-2 rounded-full backdrop-blur-md animate-bounce-slow text-sm font-medium">
+                        Select a node to simulate a change request
+                    </div>
+                )}
+
+                {/* GRAPH AREA */}
+                <div className="relative w-full h-full min-h-[600px] transform transition-transform duration-500">
+
+                    {/* EDGES (SVG Layer) */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+                        <defs>
+                            <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+                            </marker>
+                            <marker id="arrowhead-impact" markerWidth="10" markerHeight="7" refX="28" refY="3.5" orient="auto">
+                                <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+                            </marker>
+                        </defs>
+                        {visibleEdges.map((edge, i) => {
+                            const source = visibleNodes.find(n => n.id === edge.source);
+                            const target = visibleNodes.find(n => n.id === edge.target);
+                            if (!source || !target) return null;
+
+                            const isImpactPath = viewMode === 'impact' && selectedNode && impactedNodes.has(edge.source) && impactedNodes.has(edge.target);
+                            const isDimmed = (viewMode === 'impact' && selectedNode && !isImpactPath) || (viewMode === 'risk' && selectedNode && edge.source !== selectedNode);
+
+                            return (
+                                <g key={i} className={`transition-all duration-500 ${isDimmed ? 'opacity-10' : 'opacity-60'}`}>
+                                    <line
+                                        x1={source.x} y1={source.y}
+                                        x2={target.x} y2={target.y}
+                                        stroke={isImpactPath ? '#ef4444' : '#64748b'}
+                                        strokeWidth={isImpactPath ? 3 : 1.5}
+                                        markerEnd={isImpactPath ? "url(#arrowhead-impact)" : "url(#arrowhead)"}
+                                        fill="none"
+                                        strokeDasharray={edge.type === 'Connects' ? '5,5' : '0'}
+                                    />
+                                    {/* Edge Label on midpoint */}
+                                    {(!isDimmed || viewMode === 'standard') && (
+                                        <text
+                                            x={(source.x + target.x) / 2}
+                                            y={(source.y + target.y) / 2 - 10}
+                                            textAnchor="middle"
+                                            className="fill-slate-500 text-[10px] uppercase font-bold tracking-widest bg-slate-900"
+                                        >
+                                            {edge.type}
+                                        </text>
+                                    )}
+                                </g>
+                            );
+                        })}
                     </svg>
 
-                    {/* Legend / Controls */}
-                    <div className="absolute top-6 right-6 bg-slate-950/80 backdrop-blur-md p-4 rounded-xl border border-white/10 shadow-xl">
-                        <h4 className="text-xs font-semibold text-slate-500 mb-3 uppercase">Legend</h4>
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-2 text-xs text-slate-300">
-                                <div className="w-2 h-2 rounded-full bg-emerald-400" /> Operational
+                    {/* NODES (HTML Layer) */}
+                    {visibleNodes.map(node => (
+                        <div
+                            key={node.id}
+                            onClick={() => handleNodeClick(node.id)}
+                            className={`absolute transform -translate-x-1/2 -translate-y-1/2 z-10 transition-all duration-500 group cursor-pointer`}
+                            style={{ left: node.x, top: node.y }}
+                        >
+                            {/* Node Circle */}
+                            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center border-2 bg-slate-950 transition-all duration-300 ${getNodeColor(node)} ${node.layer === 'biz' ? 'ring-2 ring-purple-500/20' : ''}`}>
+                                <node.icon size={28} />
+
+                                {/* Status Dot */}
+                                <div className={`absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-slate-900 ${node.status === 'Active' ? 'bg-emerald-500' :
+                                    node.status === 'Warning' ? 'bg-orange-500 animate-pulse' : 'bg-slate-500'
+                                    }`}></div>
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-slate-300">
-                                <div className="w-2 h-2 rounded-full bg-orange-400" /> Warning / Issue
+
+                            {/* Label */}
+                            <div className={`mt-3 text-center transition-opacity duration-300 ${viewMode !== 'standard' && selectedNode && node.id !== selectedNode && !impactedNodes.has(node.id) ? 'opacity-20' : 'opacity-100'}`}>
+                                <p className="text-xs font-bold text-slate-200 bg-slate-900/80 px-2 py-0.5 rounded-full border border-white/10 backdrop-blur-sm whitespace-nowrap">{node.name}</p>
+                                <p className="text-[10px] text-slate-500 uppercase font-semibold mt-0.5">{node.type}</p>
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-slate-300">
-                                <div className="w-2 h-2 rounded-full bg-red-400" /> Critical Failure
+
+                            {/* TOOLTIP ON HOVER */}
+                            <div className="absolute top-full mt-4 left-1/2 -translate-x-1/2 w-48 bg-slate-900 border border-white/10 rounded-xl p-3 shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-200 z-50">
+                                <div className="flex justify-between items-start mb-2">
+                                    <span className="text-xs font-bold text-white">{node.name}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${node.status === 'Active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-orange-500/20 text-orange-400'}`}>{node.status}</span>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex justify-between text-[10px] text-slate-400">
+                                        <span>Health</span>
+                                        <span className="text-emerald-400">98%</span>
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-slate-400">
+                                        <span>Issues</span>
+                                        <span>0 Open</span>
+                                    </div>
+                                    <div className="flex justify-between text-[10px] text-slate-400">
+                                        <span>Last Patch</span>
+                                        <span>2d ago</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                {/* --- IMPACT SUMMARY BANNER --- */}
+                {viewMode === 'impact' && selectedNode && (
+                    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-xl border border-red-500/30 rounded-2xl p-6 shadow-2xl animate-in slide-in-from-bottom-6 z-40 max-w-lg w-full">
+                        <div className="flex items-start gap-4">
+                            <div className="p-3 bg-red-500/20 rounded-xl">
+                                <AlertTriangle className="text-red-500" size={24} />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-bold text-white mb-1">Critical Impact Detected</h3>
+                                <p className="text-sm text-slate-400 mb-4">
+                                    Failure in <span className="font-mono text-xs text-white bg-white/10 px-1 py-0.5 rounded">{visibleNodes.find(n => n.id === selectedNode)?.name}</span> will cascade to {impactedNodes.size - 1} dependent systems.
+                                </p>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="bg-slate-950 rounded-lg p-2 text-center border border-white/5">
+                                        <div className="text-xl font-bold text-white">{[...impactedNodes].filter(id => id.includes('svc-') || id.includes('app')).length}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase">Services</div>
+                                    </div>
+                                    <div className="bg-slate-950 rounded-lg p-2 text-center border border-white/5">
+                                        <div className="text-xl font-bold text-white">{[...impactedNodes].some(id => id.includes('user')) ? 'All' : '0'}</div>
+                                        <div className="text-[10px] text-slate-500 uppercase">Users</div>
+                                    </div>
+                                    <div className="bg-slate-950 rounded-lg p-2 text-center border border-white/5">
+                                        <div className="text-xl font-bold text-red-400">High</div>
+                                        <div className="text-[10px] text-slate-500 uppercase">Severity</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button onClick={() => setSelectedNode(null)} className="p-1 hover:bg-white/10 rounded-full text-slate-400 hover:text-white">
+                                <XCircle size={20} />
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- CHANGE RISK PANEL --- */}
+                {viewMode === 'risk' && simulatingChange && selectedNode && (
+                    <div className="absolute top-24 right-8 w-80 bg-slate-900/90 backdrop-blur-xl border border-amber-500/30 rounded-2xl p-6 shadow-2xl animate-in fade-in slide-in-from-right-6 z-40">
+                        <div className="flex justify-between items-start mb-4">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Zap className="text-amber-400" size={18} />
+                                Change Risk
+                            </h3>
+                            <span className={`px-2 py-1 rounded text-xs font-bold border ${changeRisk?.score === 'High' ? 'bg-red-500/20 text-red-400 border-red-500/30' : changeRisk?.score === 'Medium' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'}`}>
+                                {changeRisk?.score} Risk
+                            </span>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="bg-black/20 rounded-lg p-3 border border-white/5">
+                                <p className="text-xs text-slate-500 uppercase font-semibold mb-1">Target Asset</p>
+                                <p className="text-sm font-medium text-white">{visibleNodes.find(n => n.id === selectedNode)?.name}</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400">Total Dependencies</span>
+                                    <span className="text-white font-mono">{changeRisk?.count}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400">User Impact</span>
+                                    <span className={`${changeRisk?.userImpact ? 'text-red-400' : 'text-emerald-400'}`}>{changeRisk?.userImpact ? 'Yes' : 'No'}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-slate-400">Business Critical</span>
+                                    <span className={`${changeRisk?.bizImpact ? 'text-red-400' : 'text-emerald-400'}`}>{changeRisk?.bizImpact ? 'Yes' : 'No'}</span>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 border-t border-white/10">
+                                <button className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-sm transition-colors shadow-lg shadow-blue-500/20">
+                                    Generate Risk Report
+                                </button>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
+
             </div>
         </div>
     );

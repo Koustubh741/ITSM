@@ -22,8 +22,24 @@ export default function Layout({ children }) {
     const { currentRole, setCurrentRole, ROLES, logout } = useRole();
     const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
 
+    const ROLE_DASHBOARD_MAP = {
+        'System Admin': '/dashboard/system-admin',
+        'Asset Manager': '/dashboard/asset-inventory-manager',
+        'Inventory Manager': '/dashboard/asset-inventory-manager',
+        'Procurement Manager': '/dashboard/procurement-finance',
+        'Procurement & Finance': '/dashboard/procurement-finance', // Handle both label variations if needed
+        'IT Support': '/dashboard/it-management',
+        'IT Management': '/dashboard/it-management',
+        'Audit Officer': '/dashboard/audit',
+        'Finance': '/dashboard/finance',
+        'End User': '/dashboard/end-user'
+    };
+
+    // Use mapped path or fallback
+    const dashboardPath = ROLE_DASHBOARD_MAP[currentRole.label] || '/dashboard/end-user';
+
     const allNavItems = [
-        { label: 'Dashboard', href: '/', icon: LayoutDashboard },
+        { label: 'Dashboard', href: dashboardPath, icon: LayoutDashboard },
         { label: 'Enterprise', href: '/enterprise-features', icon: Sparkles },
         { label: 'Assets', href: '/assets', icon: Server },
         { label: 'Renewals', href: '/renewals', icon: RotateCcw },
@@ -51,7 +67,8 @@ export default function Layout({ children }) {
                         <div className="flex flex-col gap-4 mt-4">
                             {navItems.map((item) => {
                                 const Icon = item.icon
-                                const isActive = router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
+                                // Use asPath for accurate active state on dynamic routes
+                                const isActive = router.asPath === item.href || (item.href !== '/' && router.asPath.startsWith(item.href))
                                 return (
                                     <div key={item.href} className={`p-2 rounded-lg ${isActive ? 'text-blue-400 bg-blue-500/10' : 'text-slate-500'}`}>
                                         <Icon size={20} />
@@ -72,7 +89,7 @@ export default function Layout({ children }) {
                         <nav className="p-4 space-y-2 flex-1 overflow-y-auto custom-scrollbar">
                             {navItems.map((item) => {
                                 const Icon = item.icon
-                                const isActive = router.pathname === item.href || (item.href !== '/' && router.pathname.startsWith(item.href))
+                                const isActive = router.asPath === item.href || (item.href !== '/' && router.asPath.startsWith(item.href))
                                 return (
                                     <Link
                                         key={item.href}
@@ -99,6 +116,10 @@ export default function Layout({ children }) {
                                                 onClick={() => {
                                                     setCurrentRole(role);
                                                     setIsRoleMenuOpen(false);
+
+                                                    // Immediate navigation logic using shared map
+                                                    const targetPath = ROLE_DASHBOARD_MAP[role.label] || '/dashboard/end-user';
+                                                    router.push(targetPath);
                                                 }}
                                                 className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors ${currentRole.label === role.label ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
                                                     }`}

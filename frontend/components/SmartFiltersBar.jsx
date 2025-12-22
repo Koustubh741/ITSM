@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Filter, Save, X, Calendar, Briefcase, Tag, AlertTriangle } from 'lucide-react';
 
-export default function SmartFiltersBar({ onFilterChange, onSaveView, className = "" }) {
+export default function SmartFiltersBar({ onFilterChange, onSaveView, className = "", initialFilters }) {
     const [filters, setFilters] = useState({
         search: '',
         status: 'All',
@@ -9,6 +9,13 @@ export default function SmartFiltersBar({ onFilterChange, onSaveView, className 
         department: 'All',
         warranty: 'All'
     });
+
+    // Update internal state when initialFilters changes (e.g. from URL)
+    useEffect(() => {
+        if (initialFilters) {
+            setFilters(prev => ({ ...prev, ...initialFilters }));
+        }
+    }, [initialFilters]);
 
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -56,7 +63,7 @@ export default function SmartFiltersBar({ onFilterChange, onSaveView, className 
                         className="appearance-none bg-slate-900/50 border border-white/10 text-slate-300 py-2.5 px-4 pr-8 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                     >
                         <option value="All">All Status</option>
-                        <option value="Active">Active</option>
+                        <option value="In Use">In Use</option>
                         <option value="In Stock">In Stock</option>
                         <option value="Repair">Repair</option>
                         <option value="Retired">Retired</option>

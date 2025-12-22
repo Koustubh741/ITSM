@@ -11,14 +11,42 @@ export default function RenewalsCalendarPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Fetch Mock Data
-        const fetchEvents = async () => {
+        // Fetch Data from LocalStorage
+        const fetchEvents = () => {
             setLoading(true);
             try {
-                // In production, we would pass currentMonth to filter query
-                const res = await fetch('/api/renewals/calendar');
-                const data = await res.json();
-                setEvents(data);
+                const savedAssets = localStorage.getItem('assets');
+                let assetList = [];
+
+                if (savedAssets) {
+                    assetList = JSON.parse(savedAssets);
+                } else {
+                    const { initialMockAssets } = require('@/data/mockAssets');
+                    assetList = initialMockAssets;
+                }
+
+                const newEvents = assetList
+                    .filter(a => a.warranty_expiry) // Only assets with expiry
+                    .map(a => ({
+                        date: a.warranty_expiry,
+                        title: 'Warranty Expiry',
+                        asset: a.name,
+                        type: 'Warranty' // Orange
+                    }));
+
+                // Add some mock Service Contracts for variety, attached to random assets
+                const contractEvents = assetList.slice(0, 5).map(a => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + Math.floor(Math.random() * 60));
+                    return {
+                        date: d.toISOString().split('T')[0],
+                        title: 'Service Contract Renewal',
+                        asset: a.name,
+                        type: 'Contract' // Blue
+                    };
+                });
+
+                setEvents([...newEvents, ...contractEvents]);
             } catch (e) {
                 console.error(e);
             } finally {

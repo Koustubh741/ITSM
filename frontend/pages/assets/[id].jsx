@@ -73,7 +73,7 @@ export default function AssetDetail() {
                     <p className="text-slate-400 font-mono text-sm">{asset.serial_number}</p>
                 </div>
                 <div className="ml-auto">
-                    <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ring-1 ring-inset ${asset.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20' :
+                    <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ring-1 ring-inset ${asset.status === 'In Use' ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20' :
                         asset.status === 'In Stock' ? 'bg-blue-500/10 text-blue-400 ring-blue-500/20' :
                             'bg-slate-500/10 text-slate-400 ring-slate-500/20'
                         }`}>
@@ -203,7 +203,7 @@ export default function AssetDetail() {
                                 Renewal & Service Request
                             </h3>
                             <p className="text-slate-400 text-sm mb-6">
-                                This asset is flagged for attention ({asset.status === 'Active' ? 'Warranty Expired' : asset.status}).
+                                This asset is flagged for attention ({asset.status === 'In Use' ? 'Warranty Expired' : asset.status}).
                                 Submit a request to the relevant department.
                             </p>
 

@@ -2,7 +2,7 @@
 // Ensures all assets have proper assignment data (no "Unassigned" or "-")
 
 const ASSIGNEES_BY_STATUS = {
-    'Active': ['John Smith', 'Sarah Johnson', 'Mike Davis', 'Emily Chen', 'David Park'],
+    'In Use': ['John Smith', 'Sarah Johnson', 'Mike Davis', 'Emily Chen', 'David Park'],
     'Repair': ['IT Support Team', 'Tech Dept', 'Maintenance Team', 'Service Desk'],
     'Maintenance': ['Custodian Team', 'IT Support', 'Facilities Team'],
     'In Stock': ['Inventory Manager', 'Warehouse Team', 'Asset Custodian'],
@@ -24,8 +24,8 @@ export function normalizeAssetAssignment(asset) {
     }
 
     // Auto-assign based on status
-    const status = asset.status || 'Active';
-    const assigneePool = ASSIGNEES_BY_STATUS[status] || ASSIGNEES_BY_STATUS['Active'];
+    const status = asset.status || 'In Use';
+    const assigneePool = ASSIGNEES_BY_STATUS[status] || ASSIGNEES_BY_STATUS['In Use'];
 
     // Pick a random assignee and assigner (deterministic based on asset id for consistency)
     const assigneeIndex = asset.id ? (asset.id % assigneePool.length) : 0;

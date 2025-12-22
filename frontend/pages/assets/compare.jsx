@@ -13,27 +13,49 @@ export default function AssetComparisonPage() {
     const [assets, setAssets] = useState([]);
 
     useEffect(() => {
-        // Fetch simple list for dropdowns
-        const mockList = Array.from({ length: 10 }).map((_, i) => ({
-            id: `AST-100${i}`,
-            name: `Laptop Pro X${i}`
-        }));
-        setAssets(mockList);
+        // Load real assets
+        const savedAssets = localStorage.getItem('assets');
+        if (savedAssets) {
+            setAssets(JSON.parse(savedAssets));
+        } else {
+            const { initialMockAssets } = require('@/data/mockAssets');
+            setAssets(initialMockAssets);
+        }
     }, []);
 
-    const handleCompare = async () => {
+    const handleCompare = () => {
         if (!selectedAsset1 || !selectedAsset2) return;
         setLoading(true);
-        try {
-            // Call our new Mock API
-            const res = await fetch(`/api/compare?id1=${selectedAsset1}&id2=${selectedAsset2}`);
-            const data = await res.json();
-            setComparisonData(data);
-        } catch (e) {
-            console.error(e);
-        } finally {
+
+        // Simulate "Processing" for 500ms
+        setTimeout(() => {
+            // loose comparison or string conversion for IDs
+            const a1 = assets.find(a => String(a.id) === String(selectedAsset1));
+            const a2 = assets.find(a => String(a.id) === String(selectedAsset2));
+
+            if (a1 && a2) {
+                // Normalize specs for comparison
+                const normalizeSpecs = (asset) => {
+                    const s = asset.specs || {};
+                    return {
+                        model: asset.model || 'N/A',
+                        processor: s.processor || 'N/A',
+                        ram: s.ram || 'N/A',
+                        storage: s.storage || 'N/A',
+                        graphics: s.graphics || 'Integrated',
+                        purchase_date: asset.purchase_date || 'N/A',
+                        warranty: asset.warranty_expiry || 'N/A',
+                        cost: asset.cost ? `₹${asset.cost.toLocaleString()}` : 'N/A'
+                    };
+                };
+
+                setComparisonData({
+                    asset1: { name: a1.name, specs: normalizeSpecs(a1), condition: a1.status || 'Unknown' },
+                    asset2: { name: a2.name, specs: normalizeSpecs(a2), condition: a2.status || 'Unknown' }
+                });
+            }
             setLoading(false);
-        }
+        }, 500);
     };
 
     return (

@@ -159,7 +159,7 @@ export default function EndUserDashboard() {
                                         </div>
                                     </div>
                                     <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-xs font-semibold">
-                                        Active
+                                        In Use
                                     </span>
                                 </div>
                             </div>

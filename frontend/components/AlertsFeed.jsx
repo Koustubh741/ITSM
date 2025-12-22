@@ -112,10 +112,8 @@ export default function AlertsFeed() {
                 })}
             </div>
 
-            <Link href="/assets">
-                <button className="w-full py-3 mt-2 rounded-xl border border-white/10 text-slate-400 text-sm hover:bg-white/5 hover:text-white transition-all font-medium">
-                    View All Notifications
-                </button>
+            <Link href="/notifications" className="block w-full py-3 text-center text-xs text-slate-400 hover:text-white font-medium border-t border-white/5 hover:bg-white/5 transition-colors">
+                View All Notifications
             </Link>
         </div>
     );

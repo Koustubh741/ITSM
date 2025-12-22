@@ -1,76 +1,654 @@
-import { Wrench, ShieldCheck, Terminal, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Wrench, ShieldCheck, Terminal, AlertCircle, X, CheckCircle, Play, Server, Lock, Activity, ArrowRight, Trash2, Clock, MapPin, User, FileText, Check, MoreHorizontal, Printer, ChevronRight } from 'lucide-react';
+import { pendingSetupQueue, allOpenTickets, deploymentReadyAssets, disposalQueue } from '@/data/mockTechnicianData';
+
+// Helper Component for Manual Install Items (Step 2 of Config)
+const SoftwareInstallItem = ({ app }) => {
+    const [status, setStatus] = useState('pending'); // pending | installing | installed
+
+    const handleInstall = () => {
+        setStatus('installing');
+        setTimeout(() => setStatus('installed'), 1500);
+    };
+
+    return (
+        <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-white/5">
+            <div className="flex items-center gap-3">
+                <div className="p-1.5 bg-slate-700 rounded text-slate-300">
+                    <Server size={14} />
+                </div>
+                <span className="text-sm text-slate-200 font-medium">{app}</span>
+            </div>
+
+            {status === 'pending' && (
+                <button
+                    onClick={handleInstall}
+                    className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors"
+                >
+                    Install
+                </button>
+            )}
+
+            {status === 'installing' && (
+                <span className="text-xs text-indigo-400 flex items-center gap-2">
+                    <div className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin"></div>
+                    Pushing...
+                </span>
+            )}
+
+            {status === 'installed' && (
+                <span className="text-xs bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded flex items-center gap-1 border border-emerald-500/20">
+                    <Check size={12} /> Installed
+                </span>
+            )}
+        </div>
+    );
+};
 
 export default function ITSupportDashboard() {
+    // STATE: Data Queues
+    const [pendingQueue, setPendingQueue] = useState(pendingSetupQueue);
+    const [tickets, setTickets] = useState(allOpenTickets);
+    const [deployedArgs, setDeployedArgs] = useState(deploymentReadyAssets);
+    const [disposalItems, setDisposalItems] = useState(disposalQueue);
+
+    // STATE: Modals & Workflows
+    const [activeModal, setActiveModal] = useState(null); // 'PENDING', 'TICKETS', 'DEPLOY', 'DISPOSAL', 'CONFIG', 'RESOLVE_TICKET'
+    const [selectedItem, setSelectedItem] = useState(null);
+
+    // STATE: Config Wizard
+    const [configStep, setConfigStep] = useState(1);
+
+    // STATE: Ticket Resolution
+    const [resolutionNotes, setResolutionNotes] = useState('');
+    const [resolutionType, setResolutionType] = useState('Fixed');
+
+    // --- WORKFLOW ACTIONS ---
+
+    // 1. CONFIGURATION WORKFLOW
+    const startConfig = (item) => {
+        setSelectedItem(item);
+        setConfigStep(1);
+        setActiveModal('CONFIG');
+    };
+
+    const handleConfigStepComplete = () => {
+        if (configStep < 5) {
+            setConfigStep(prev => prev + 1);
+        } else {
+            // FINISH CONFIGURATION
+            const newItem = {
+                id: `AST-DEP-${Math.floor(Math.random() * 10000)}`,
+                name: selectedItem.name,
+                os: "Windows 11 Pro Enterprise",
+                security: "Compliant",
+                assignedUser: selectedItem.user,
+                location: selectedItem.location,
+                date: new Date().toISOString().split('T')[0]
+            };
+
+            setDeployedArgs([newItem, ...deployedArgs]);
+            setPendingQueue(pendingQueue.filter(i => i.id !== selectedItem.id));
+            setActiveModal(null);
+            setSelectedItem(null);
+        }
+    };
+
+    // 2. DISPOSAL WORKFLOW
+    const handleStartWipe = (id) => {
+        // Mock wipe start
+        alert(`Secure Wipe started for Asset ID ${id}. This will take approx 45 mins.`);
+    };
+
+    const handleMarkDisposed = (id) => {
+        if (confirm("Confirm disposal? This action is irreversible.")) {
+            setDisposalItems(disposalItems.filter(i => i.id !== id));
+        }
+    };
+
+    // 3. DEPLOYMENT WORKFLOW
+    const handleHandover = (item) => {
+        alert(`Handover protocol initiated for ${item.assignedUser}. Email notification sent.`);
+        setDeployedArgs(deployedArgs.filter(i => i.id !== item.id));
+    };
+
+    const handleGenerateAck = (item) => {
+        alert(`Generating PDF Acknowledgement for ${item.name} (${item.id})...`);
+    };
+
+    // 4. TICKET RESOLUTION WORKFLOW
+    const openResolveModal = (ticket) => {
+        setSelectedItem(ticket);
+        setResolutionNotes('');
+        setResolutionType('Fixed');
+        setActiveModal('RESOLVE_TICKET');
+    };
+
+    const submitResolution = () => {
+        if (!resolutionNotes) {
+            alert("Please enter troubleshooting notes.");
+            return;
+        }
+        // Resolve logic
+        setTickets(tickets.filter(i => i.id !== selectedItem.id));
+        setActiveModal(null);
+        setSelectedItem(null);
+    };
+
+
+    // --- HELPERS ---
+    const ConfigStep = ({ step, current }) => {
+        const isCompleted = current > step;
+        const isCurrent = current === step;
+        return (
+            <div className={`flex items-center gap-2 ${isCurrent ? 'text-indigo-400 font-bold' : isCompleted ? 'text-emerald-400' : 'text-slate-600'}`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 
+                    ${isCurrent ? 'border-indigo-400 bg-indigo-500/20' : isCompleted ? 'border-emerald-500 bg-emerald-500/20' : 'border-slate-700 bg-slate-800'}`}>
+                    {isCompleted ? <Check size={16} /> : <span>{step}</span>}
+                </div>
+                {step < 5 && <div className={`flex-1 h-0.5 w-8 ${isCompleted ? 'bg-emerald-500' : 'bg-slate-700'}`}></div>}
+            </div>
+        );
+    };
+
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 relative h-full">
             <header>
                 <h1 className="text-3xl font-bold text-white">Technician Workbench</h1>
-                <p className="text-slate-400">Device readiness, support tickets, and configuration tasks</p>
+                <p className="text-slate-400">IT Support Operations & Device Lifecycle Management</p>
             </header>
 
+            {/* --- METRIC CARDS --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Quick Stats */}
-                <div className="glass-card p-5 bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 border-indigo-500/20">
-                    <p className="text-indigo-300 text-xs font-bold uppercase">Pending Setup</p>
-                    <h3 className="text-3xl font-bold text-white mt-1">14</h3>
-                    <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
-                        <Terminal size={12} /> 4 imaging tasks queued
+
+                {/* 1. PENDING SETUP */}
+                <div
+                    onClick={() => setActiveModal('PENDING')}
+                    className="glass-card p-5 bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 border-indigo-500/20 cursor-pointer hover:border-indigo-400/50 transition-all hover:scale-[1.02]"
+                >
+                    <p className="text-indigo-300 text-xs font-bold uppercase flex justify-between">
+                        Pending Setup <ChevronRight size={14} className="opacity-50" />
+                    </p>
+                    <h3 className="text-3xl font-bold text-white mt-1">{pendingQueue.length}</h3>
+                    <div className="mt-2 text-xs text-indigo-200/70 flex items-center gap-1">
+                        <Terminal size={12} /> {pendingQueue.filter(i => i.priority === 'High').length} high priority
                     </div>
                 </div>
-                <div className="glass-card p-5 bg-gradient-to-br from-rose-500/10 to-rose-600/5 border-rose-500/20">
-                    <p className="text-rose-300 text-xs font-bold uppercase">Open Tickets</p>
-                    <h3 className="text-3xl font-bold text-white mt-1">8</h3>
-                    <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
-                        <AlertCircle size={12} /> 2 high priority
+
+                {/* 2. OPEN TICKETS */}
+                <div
+                    onClick={() => setActiveModal('TICKETS')}
+                    className="glass-card p-5 bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20 cursor-pointer hover:border-amber-400/50 transition-all hover:scale-[1.02]"
+                >
+                    <p className="text-amber-300 text-xs font-bold uppercase flex justify-between">
+                        Open Tickets <ChevronRight size={14} className="opacity-50" />
+                    </p>
+                    <h3 className="text-3xl font-bold text-white mt-1">{tickets.length}</h3>
+                    <div className="mt-2 text-xs text-amber-200/70 flex items-center gap-1">
+                        <Activity size={12} /> {tickets.filter(t => t.priority === 'High').length} critical issues
                     </div>
                 </div>
-                <div className="glass-card p-5">
-                    <p className="text-emerald-300 text-xs font-bold uppercase">Ready to Deploy</p>
-                    <h3 className="text-3xl font-bold text-white mt-1">5</h3>
+
+                {/* 3. READY TO DEPLOY */}
+                <div
+                    onClick={() => setActiveModal('DEPLOY')}
+                    className="glass-card p-5 cursor-pointer hover:bg-white/5 transition-all hover:scale-[1.02]"
+                >
+                    <p className="text-emerald-300 text-xs font-bold uppercase flex justify-between">
+                        Ready for User <ChevronRight size={14} className="opacity-50" />
+                    </p>
+                    <h3 className="text-3xl font-bold text-white mt-1">{deployedArgs.length}</h3>
+                    <div className="mt-2 text-xs text-slate-400 flex items-center gap-1">
+                        <User size={12} /> Configure & Verified
+                    </div>
                 </div>
-                <div className="glass-card p-5">
-                    <p className="text-slate-400 text-xs font-bold uppercase">Disposal Wipe</p>
-                    <h3 className="text-3xl font-bold text-white mt-1">20</h3>
+
+                {/* 4. DISPOSAL */}
+                <div
+                    onClick={() => setActiveModal('DISPOSAL')}
+                    className="glass-card p-5 cursor-pointer hover:bg-white/5 transition-all hover:scale-[1.02]"
+                >
+                    <p className="text-slate-400 text-xs font-bold uppercase flex justify-between">
+                        Disposal Queue <ChevronRight size={14} className="opacity-50" />
+                    </p>
+                    <h3 className="text-3xl font-bold text-white mt-1">{disposalItems.length}</h3>
+                    <div className="mt-2 text-xs text-slate-500 flex items-center gap-1">
+                        <Trash2 size={12} /> Pending Data Wipe
+                    </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="glass-panel p-0 overflow-hidden">
-                    <div className="p-4 border-b border-white/10 bg-white/5">
-                        <h3 className="font-bold text-white">New Assets Pending Setup</h3>
+            {/* --- DASHBOARD WIDGETS --- */}
+            <div className="grid grid-cols-1 gap-6">
+
+                {/* JUST THE PENDING SETUP WIDGET (Removed Compliance as requested) */}
+                <div className="glass-panel p-0 overflow-hidden flex flex-col">
+                    <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center">
+                        <h3 className="font-bold text-white flex items-center gap-2">
+                            <Clock size={16} className="text-indigo-400" />
+                            Upcoming Validations & Setups
+                        </h3>
+                        <button onClick={() => setActiveModal('PENDING')} className="text-xs text-indigo-400 hover:text-indigo-300">View Full Queue</button>
                     </div>
-                    <div className="p-4 space-y-3">
-                        {['MacBook Pro M3 (Startups Team)', 'Dell XPS 15 (Design Team)', 'ThinkPad X1 (Sales)'].map((item, i) => (
-                            <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-white/5">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded bg-slate-700 flex items-center justify-center text-slate-400">
-                                        <Wrench size={14} />
+                    <div className="p-4 space-y-3 flex-1">
+                        {pendingQueue.slice(0, 5).map((item) => (
+                            <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-slate-800/50 border border-white/5 hover:border-white/10 transition-colors">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-lg bg-slate-700/50 flex items-center justify-center text-slate-400 border border-white/5">
+                                        <Wrench size={18} />
                                     </div>
-                                    <span className="text-sm text-slate-200">{item}</span>
+                                    <div>
+                                        <div className="text-sm text-slate-200 font-medium">{item.name}</div>
+                                        <div className="text-xs text-slate-500 flex items-center gap-2">
+                                            <span>{item.user} ({item.requestedFor})</span>
+                                            <span className="w-1 h-1 rounded-full bg-slate-600"></span>
+                                            <span className="text-amber-500">Due in {item.slaCountdown}</span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <button className="text-xs bg-indigo-500 hover:bg-indigo-400 text-white px-3 py-1.5 rounded">Start Config</button>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 border border-white/5">{item.id}</span>
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); startConfig(item); }}
+                                        className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded transition-colors shadow-lg shadow-indigo-500/20"
+                                    >
+                                        Start Config
+                                    </button>
+                                </div>
                             </div>
                         ))}
+                        {pendingQueue.length === 0 && (
+                            <div className="text-center py-12 text-slate-500 text-sm">All setups complete for today.</div>
+                        )}
                     </div>
                 </div>
 
-                <div className="glass-panel p-0 overflow-hidden">
-                    <div className="p-4 border-b border-white/10 bg-white/5">
-                        <h3 className="font-bold text-white">Security Compliance Gaps</h3>
-                    </div>
-                    <div className="p-4 space-y-3">
-                        {['Endpoint protection outdated (3 devices)', 'OS Patch Missing (Windows 11 23H2)'].map((item, i) => (
-                            <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-rose-500/5 border border-rose-500/10">
-                                <div className="flex items-center gap-3">
-                                    <ShieldCheck size={16} className="text-rose-400" />
-                                    <span className="text-sm text-rose-100">{item}</span>
-                                </div>
-                                <button className="text-xs text-rose-400 hover:text-rose-300 border border-rose-500/30 px-2 py-1 rounded">Fix</button>
-                            </div>
-                        ))}
-                    </div>
-                </div>
             </div>
+
+
+            {/* ===================================================================================== */}
+            {/* MODALS */}
+            {/* ===================================================================================== */}
+
+            {activeModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+
+                    {/* ---- CONFIG WIZARD MODAL (5 STEPS) ---- */}
+                    {activeModal === 'CONFIG' && selectedItem && (
+                        <div className="bg-slate-900 border border-white/10 rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden animate-in scale-95 duration-200 flex flex-col max-h-[90vh]">
+                            <div className="bg-gradient-to-r from-indigo-900/50 to-slate-900 p-6 border-b border-white/10 flex justify-between items-center shrink-0">
+                                <div>
+                                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                        <Terminal size={20} className="text-indigo-400" />
+                                        Workstation Configuration
+                                    </h2>
+                                    <p className="text-sm text-indigo-300/60 mt-1">Ticket: {selectedItem.id}</p>
+                                </div>
+                                <div className="text-right">
+                                    <span className="text-xs font-mono text-slate-500 block uppercase tracking-wider">Target User</span>
+                                    <span className="text-sm font-bold text-white">{selectedItem.user}</span>
+                                </div>
+                            </div>
+
+                            <div className="p-8 overflow-y-auto custom-scrollbar">
+                                {/* Steps Indicator */}
+                                <div className="flex justify-between mb-8 px-4">
+                                    {[1, 2, 3, 4, 5].map(s => <ConfigStep key={s} step={s} current={configStep} />)}
+                                </div>
+
+                                {/* Step Content */}
+                                <div className="bg-slate-800/30 rounded-xl p-6 border border-white/5 min-h-[300px]">
+
+                                    {/* STEP 1: ASSET OVERVIEW */}
+                                    {configStep === 1 && (
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                                            <h3 className="text-lg font-bold text-white mb-4">Step 1: Asset Overview</h3>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-4 bg-slate-800 rounded-lg border border-white/5">
+                                                    <span className="text-xs text-slate-500 uppercase">Model</span>
+                                                    <div className="text-white font-medium">{selectedItem.model || 'Standard Workstation'}</div>
+                                                </div>
+                                                <div className="p-4 bg-slate-800 rounded-lg border border-white/5">
+                                                    <span className="text-xs text-slate-500 uppercase">Serial Number</span>
+                                                    <div className="text-white font-medium">{selectedItem.serial || 'Unknown'}</div>
+                                                </div>
+                                                <div className="p-4 bg-slate-800 rounded-lg border border-white/5 col-span-2">
+                                                    <span className="text-xs text-slate-500 uppercase">Specs</span>
+                                                    <div className="text-white font-medium">{selectedItem.details || 'Standard Configuration'}</div>
+                                                </div>
+                                            </div>
+                                            <div className="mt-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded text-indigo-200 text-sm flex gap-2">
+                                                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                                                Please physically verify the serial number matches the asset tag before proceeding.
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* STEP 2: OS SELECTION (NOW SOFTWARE PROVISIONING) */}
+                                    {configStep === 2 && (
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                                            <h3 className="text-lg font-bold text-white mb-4">Step 2: OS & Image Selection</h3>
+                                            <div className="grid grid-cols-1 gap-3">
+                                                <label className="flex items-center gap-4 p-4 bg-slate-800 border-2 border-indigo-500 rounded-lg cursor-pointer">
+                                                    <input type="radio" name="os" defaultChecked className="w-5 h-5 text-indigo-600" />
+                                                    <div>
+                                                        <div className="font-bold text-white">Windows 11 Enterprise 23H2 (Stable)</div>
+                                                        <div className="text-xs text-slate-400">Standard Corporate Image v4.2</div>
+                                                    </div>
+                                                </label>
+                                                <label className="flex items-center gap-4 p-4 bg-slate-800 border border-white/10 rounded-lg cursor-pointer opacity-60">
+                                                    <input type="radio" name="os" className="w-5 h-5 text-indigo-600" />
+                                                    <div>
+                                                        <div className="font-bold text-white">Windows 10 Enterprise LTSC</div>
+                                                        <div className="text-xs text-slate-400">Legacy Systems Only</div>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* STEP 3: SECURITY TOOLS */}
+                                    {configStep === 3 && (
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                                            <h3 className="text-lg font-bold text-white mb-4">Step 3: Security Tools Setup</h3>
+                                            <p className="text-sm text-slate-400 mb-4">Manually verify installation or push via MDM.</p>
+                                            <div className="space-y-2">
+                                                <SoftwareInstallItem app="CrowdStrike Falcon Sensor" />
+                                                <SoftwareInstallItem app="Zscaler Client Connector" />
+                                                <SoftwareInstallItem app="Tanium Client" />
+                                                <SoftwareInstallItem app="Local Admin Password Solution (LAPS)" />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* STEP 4: NETWORK */}
+                                    {configStep === 4 && (
+                                        <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                                            <h3 className="text-lg font-bold text-white mb-4">Step 4: Network Configuration</h3>
+
+                                            <div className="space-y-4">
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="text-xs text-slate-400 uppercase font-bold">Domain Join</label>
+                                                    <select className="bg-slate-900 border border-white/10 text-white p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                                                        <option>CORP.GLOBAL (Default)</option>
+                                                        <option>DMZ.LOCAL</option>
+                                                        <option>WORKGROUP</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="flex flex-col gap-1">
+                                                    <label className="text-xs text-slate-400 uppercase font-bold">VLAN Assignment</label>
+                                                    <select className="bg-slate-900 border border-white/10 text-white p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none">
+                                                        <option>VLAN 100 - Employee Workstations</option>
+                                                        <option>VLAN 200 - Developers</option>
+                                                        <option>VLAN 900 - Guest</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="flex items-center gap-2 text-emerald-400 bg-emerald-500/10 p-3 rounded border border-emerald-500/20">
+                                                    <CheckCircle size={16} />
+                                                    <span>DHCP Reservation Found: 10.20.4.112</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* STEP 5: FINAL VALIDATION */}
+                                    {configStep === 5 && (
+                                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                                            <h3 className="text-lg font-bold text-white mb-4">Step 5: Final Validation</h3>
+                                            <div className="space-y-3">
+                                                {[
+                                                    "BIOS Password Set",
+                                                    "Physical Damage Check",
+                                                    "BitLocker Encryption Active",
+                                                    "Windows Activated",
+                                                    "Latest Windows Updates Applied"
+                                                ].map((check, i) => (
+                                                    <label key={i} className="flex items-center gap-3 p-3 bg-slate-800 rounded border border-white/5 cursor-pointer hover:bg-slate-700 transition-colors">
+                                                        <input type="checkbox" defaultChecked={i < 3} className="w-5 h-5 rounded text-indigo-600 bg-slate-700 border-slate-600 focus:ring-indigo-500" />
+                                                        <span className="text-slate-200">{check}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-6 flex justify-end gap-3">
+                                    {configStep < 5 ? (
+                                        <>
+                                            <button
+                                                onClick={() => setActiveModal(null)}
+                                                className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleConfigStepComplete}
+                                                className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+                                            >
+                                                {configStep === 4 ? 'Validate & Finish' : 'Next Step'} <ArrowRight size={16} />
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button
+                                            onClick={handleConfigStepComplete}
+                                            className="w-full px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 animate-pulse"
+                                        >
+                                            <CheckCircle size={20} /> Complete Configuration
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+
+
+                    {/* ---- QUEUE MODALS ---- */}
+
+                    {['PENDING', 'TICKETS', 'DEPLOY', 'DISPOSAL'].includes(activeModal) && (
+                        <div className="bg-slate-900 border border-white/10 rounded-xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in slide-in-from-bottom-4 duration-300">
+                            <div className="p-4 border-b border-white/10 bg-white/5 flex justify-between items-center shrink-0">
+                                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                                    {activeModal === 'PENDING' && 'Pending Setup Assets'}
+                                    {activeModal === 'TICKETS' && 'Active IT Support Tickets'}
+                                    {activeModal === 'DEPLOY' && 'Ready for Deployment'}
+                                    {activeModal === 'DISPOSAL' && 'Disposal & Secure Wipe Queue'}
+                                </h2>
+                                <button onClick={() => setActiveModal(null)} className="text-slate-400 hover:text-white p-2">
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <div className="p-0 overflow-auto flex-1 custom-scrollbar">
+                                <table className="w-full text-left border-collapse">
+                                    <thead className="bg-slate-800/80 sticky top-0 z-10 backdrop-blur-sm shadow-sm">
+                                        <tr>
+                                            <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Asset / ID</th>
+                                            <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Context</th>
+                                            <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+                                            <th className="p-4 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {activeModal === 'PENDING' && pendingQueue.map(item => (
+                                            <tr key={item.id} className="hover:bg-white/5 transition-colors group">
+                                                <td className="p-4">
+                                                    <div className="font-bold text-white text-base">{item.name}</div>
+                                                    <div className="text-xs text-indigo-400 font-mono mt-1">{item.id}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="text-sm text-slate-300 font-medium">{item.user}</div>
+                                                    <div className="text-xs text-slate-500">{item.requestedFor} • {item.type}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${item.priority === 'High' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-700 text-slate-300'}`}>
+                                                        {item.priority.toUpperCase()}
+                                                    </span>
+                                                    <div className="text-xs text-slate-500 mt-1">SLA Breach in {item.slaCountdown}</div>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <button onClick={() => startConfig(item)} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-medium shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/30 transition-all">
+                                                        Start Configuration
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+
+                                        {activeModal === 'TICKETS' && tickets.map(item => (
+                                            <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="p-4">
+                                                    <div className="font-bold text-white">{item.issue}</div>
+                                                    <div className="text-xs text-slate-500 font-mono mt-0.5">{item.id}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="text-sm text-slate-300">{item.assignedTo || 'Unassigned'}</div>
+                                                    <div className="text-xs text-slate-500">Asset: {item.asset}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`w-2 h-2 rounded-full ${item.priority === 'High' ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
+                                                        <span className="text-sm text-slate-300">{item.status}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <button
+                                                        onClick={() => openResolveModal(item)}
+                                                        className="text-xs border border-white/10 hover:bg-white/10 text-slate-300 px-4 py-2 rounded flex items-center gap-2 ml-auto transition-colors"
+                                                    >
+                                                        <CheckCircle size={14} /> Resolve Ticket
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+
+                                        {activeModal === 'DEPLOY' && deployedArgs.map(item => (
+                                            <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="p-4">
+                                                    <div className="font-medium text-white">{item.name}</div>
+                                                    <div className="text-xs text-slate-500">{item.id}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="text-sm text-slate-300">{item.assignedUser}</div>
+                                                    <div className="text-xs text-slate-500">{item.location}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-xs border border-emerald-500/20">Configured</div>
+                                                        <div className="text-xs text-emerald-500">Secure</div>
+                                                    </div>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button onClick={() => handleGenerateAck(item)} className="text-xs text-slate-400 hover:text-white border border-white/10 px-3 py-1.5 rounded flex items-center gap-1">
+                                                            <Printer size={12} /> Ack Form
+                                                        </button>
+                                                        <button onClick={() => handleHandover(item)} className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded">
+                                                            Hand Over
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+
+                                        {activeModal === 'DISPOSAL' && disposalItems.map(item => (
+                                            <tr key={item.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="p-4">
+                                                    <div className="font-medium text-white">{item.name}</div>
+                                                    <div className="text-xs text-slate-500">{item.serial}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="text-sm text-slate-300">{item.reason}</div>
+                                                    <div className="text-xs text-slate-500">Age: {item.age}</div>
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="text-xs text-amber-500 font-bold">{item.method}</div>
+                                                    <div className="text-[10px] text-slate-500">Pending Cert</div>
+                                                </td>
+                                                <td className="p-4 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button onClick={() => handleStartWipe(item.id)} className="text-xs border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 px-3 py-1.5 rounded flex items-center gap-1">
+                                                            <Activity size={12} /> Wipe
+                                                        </button>
+                                                        <button onClick={() => handleMarkDisposed(item.id)} className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded">
+                                                            Mark Disposed
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ---- TICKET RESOLUTION MODAL ---- */}
+                    {activeModal === 'RESOLVE_TICKET' && selectedItem && (
+                        <div className="bg-slate-900 border border-white/10 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                            <div className="p-6 border-b border-white/10 bg-slate-800/50">
+                                <h3 className="text-lg font-bold text-white">Resolve Incident: {selectedItem.id}</h3>
+                                <p className="text-slate-400 text-sm mt-1">{selectedItem.issue}</p>
+                            </div>
+
+                            <div className="p-6 space-y-4">
+                                <div className="grid grid-cols-2 gap-4 bg-slate-800 p-4 rounded-lg border border-white/5">
+                                    <div>
+                                        <div className="text-xs text-slate-500 uppercase">Asset</div>
+                                        <div className="text-sm text-white">{selectedItem.asset}</div>
+                                    </div>
+                                    <div>
+                                        <div className="text-xs text-slate-500 uppercase">Priority</div>
+                                        <div className="text-sm text-white">{selectedItem.priority}</div>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-sm text-slate-300">Resolution Type</label>
+                                    <select
+                                        className="w-full bg-slate-950 border border-white/10 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                                        value={resolutionType}
+                                        onChange={(e) => setResolutionType(e.target.value)}
+                                    >
+                                        <option value="Fixed">Issue Fixed (Remote/On-site)</option>
+                                        <option value="Replaced">Hardware Replaced</option>
+                                        <option value="Escalated">Escalated to L3/Vendor</option>
+                                        <option value="Training">User Training Provided</option>
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-sm text-slate-300">Troubleshooting Notes & Verification</label>
+                                    <textarea
+                                        className="w-full bg-slate-950 border border-white/10 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px]"
+                                        placeholder="Describe steps taken to resolve..."
+                                        value={resolutionNotes}
+                                        onChange={(e) => setResolutionNotes(e.target.value)}
+                                    ></textarea>
+                                </div>
+                            </div>
+
+                            <div className="p-6 border-t border-white/10 flex justify-end gap-3 bg-white/5">
+                                <button
+                                    onClick={() => setActiveModal(null)}
+                                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={submitResolution}
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold shadow-lg shadow-emerald-500/20"
+                                >
+                                    Mark as Resolved
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            )}
         </div>
-    )
+    );
 }
