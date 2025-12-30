@@ -13,6 +13,7 @@ export const ROLES = [
 export function RoleProvider({ children }) {
     const [currentRole, setCurrentRole] = useState(ROLES[0]);
     const [isAuthenticated, setIsAuthenticated] = useState(false);
+    // USER_REQUEST: User position (MANAGER or EMPLOYEE) is determined at login
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -25,7 +26,8 @@ export function RoleProvider({ children }) {
                     const parsed = JSON.parse(session);
                     if (parsed.isAuthenticated) {
                         setIsAuthenticated(true);
-                        setUser({ name: parsed.userName, location: parsed.location });
+                        // USER_REQUEST: Load position from saved session
+                        setUser({ name: parsed.userName, location: parsed.location, position: parsed.position || 'EMPLOYEE' });
                         const savedRole = ROLES.find(r => r.label === parsed.role) || ROLES[0];
                         setCurrentRole(savedRole);
                     }
@@ -44,7 +46,8 @@ export function RoleProvider({ children }) {
                 isAuthenticated: true,
                 userName: user.name,
                 location: user.location,
-                role: currentRole.label // Ensure updated role is saved
+                position: user.position, // NEW: Persist position
+                role: currentRole.label
             };
             localStorage.setItem('auth_session', JSON.stringify(session));
         }
@@ -52,7 +55,8 @@ export function RoleProvider({ children }) {
 
     const login = (userData) => {
         setIsAuthenticated(true);
-        setUser({ name: userData.userName, location: userData.location });
+        // USER_REQUEST: Store position from login form (MANAGER or EMPLOYEE)
+        setUser({ name: userData.userName, location: userData.location, position: userData.position || 'EMPLOYEE' });
         const roleObj = ROLES.find(r => r.label === userData.role) || ROLES[0];
         setCurrentRole(roleObj);
 

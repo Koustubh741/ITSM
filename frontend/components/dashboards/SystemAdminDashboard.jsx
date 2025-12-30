@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/router'
 import { Package, CheckCircle, AlertTriangle, Clock, Activity, Download, Plus, Layers, LayoutGrid, Calendar, ArrowUpRight, DollarSign, TrendingDown, ShoppingBag } from 'lucide-react'
 import BarChart from '@/components/BarChart'
 import PieChart from '@/components/PieChart'
@@ -9,6 +10,7 @@ import WorkflowVisualizer from '@/components/WorkflowVisualizer'
 import { initialMockAssets } from '@/data/mockAssets'
 
 export default function SystemAdminDashboard() {
+    const router = useRouter()
     const [loading, setLoading] = useState(true)
     const [chartMetric, setChartMetric] = useState('location')
     const [trendView, setTrendView] = useState('monthly')
@@ -336,6 +338,16 @@ export default function SystemAdminDashboard() {
         </div>
     )
 
+    const handleGraphClick = (data) => {
+        if (!data) return;
+        const name = data.name || (data.payload && data.payload.name);
+        if (!name) return;
+
+        // Map UI metric names to URL params if needed, but they mostly match
+        // chartMetric: 'location', 'type', 'segment', 'status'
+        router.push(`/assets?${chartMetric}=${encodeURIComponent(name)}`)
+    }
+
     return (
         <div className="space-y-6 pb-8">
             {/* Header Section with Toggles */}
@@ -533,12 +545,16 @@ export default function SystemAdminDashboard() {
                                         <button onClick={() => setChartMetric('status')} className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${chartMetric === 'status' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Status</button>
                                     </div>
                                 </div>
+
                                 <div className="h-80 w-full animate-in fade-in duration-500">
                                     {chartMetric === 'segment'
-                                        ? <PieChart data={stats?.by_segment || []} />
+                                        ? <PieChart data={stats?.by_segment || []} onPieClick={handleGraphClick} />
                                         : chartMetric === 'status'
-                                            ? <PieChart data={stats?.by_status || []} />
-                                            : <BarChart data={chartMetric === 'type' ? (stats?.by_type || []) : (stats?.by_location || [])} />
+                                            ? <PieChart data={stats?.by_status || []} onPieClick={handleGraphClick} />
+                                            : <BarChart
+                                                data={chartMetric === 'type' ? (stats?.by_type || []) : (stats?.by_location || [])}
+                                                onBarClick={handleGraphClick}
+                                            />
                                     }
                                 </div>
                             </div>
@@ -611,13 +627,19 @@ export default function SystemAdminDashboard() {
                             <div className="glass-panel p-6">
                                 <h3 className="text-xl font-bold text-white mb-4">Lifecycle Status Distribution</h3>
                                 <div className="h-80 w-full flex items-center justify-center">
-                                    <PieChart data={stats?.by_status || []} />
+                                    <PieChart
+                                        data={stats?.by_status || []}
+                                        onPieClick={(data) => router.push(`/assets?status=${encodeURIComponent(data.name)}`)}
+                                    />
                                 </div>
                             </div>
                             <div className="glass-panel p-6">
                                 <h3 className="text-xl font-bold text-white mb-4">Asset Type Breakdown</h3>
                                 <div className="h-80 w-full flex items-center justify-center">
-                                    <PieChart data={stats?.by_segment || []} />
+                                    <PieChart
+                                        data={stats?.by_segment || []}
+                                        onPieClick={(data) => router.push(`/assets?segment=${encodeURIComponent(data.name)}`)}
+                                    />
                                 </div>
                             </div>
                         </div>

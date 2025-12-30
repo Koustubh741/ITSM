@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Wrench, ShieldCheck, Terminal, AlertCircle, X, CheckCircle, Play, Server, Lock, Activity, ArrowRight, Trash2, Clock, MapPin, User, FileText, Check, MoreHorizontal, Printer, ChevronRight } from 'lucide-react';
-import { pendingSetupQueue, allOpenTickets, deploymentReadyAssets, disposalQueue } from '@/data/mockTechnicianData';
+import { pendingSetupQueue, allOpenTickets, deploymentReadyAssets, disposalQueue } from '@/data/mockTechnicianData'; // Keep mock data for fallback or initialization if needed, but primary is Context
+import { useAssetContext, ASSET_STATUS } from '@/contexts/AssetContext';
 
 // Helper Component for Manual Install Items (Step 2 of Config)
 const SoftwareInstallItem = ({ app }) => {
@@ -47,10 +48,35 @@ const SoftwareInstallItem = ({ app }) => {
 
 export default function ITSupportDashboard() {
     // STATE: Data Queues
-    const [pendingQueue, setPendingQueue] = useState(pendingSetupQueue);
-    const [tickets, setTickets] = useState(allOpenTickets);
-    const [deployedArgs, setDeployedArgs] = useState(deploymentReadyAssets);
-    const [disposalItems, setDisposalItems] = useState(disposalQueue);
+
+    const { assets, updateAssetStatus, requests: allRequests } = useAssetContext(); // Rename to avoid conflict if needed, or just use requests
+    // Actually I will cleaner refactor below
+
+    // Derived state for queues instead of static state
+    const pendingQueue = assets.filter(a => a.status === ASSET_STATUS.ALLOCATED || a.status === ASSET_STATUS.CONFIGURING);
+
+    // For other queues we might still check if we want to migrate them fully or keep as local state for now if they are complex (like tickets, disposal).
+    // The plan said "Replace hardcoded pendingQueue". Ticket integration is next.
+    // For now we keep ticket state local if not fully ready or use context if available (Context has tickets).
+    // Let's use context tickets!
+    // Unified Requests Context - ENTERPRISE WORKFLOW
+    const { requests, itApproveRequest, itRejectRequest } = useAssetContext();
+
+    // 1. Incoming Asset Requests (Awaiting IT Management Approval)
+    // USER_REQUEST: Update filter to IT_MANAGEMENT
+    const incomingRequests = requests.filter(r => r.currentOwnerRole === 'IT_MANAGEMENT' && (r.status === 'MANAGER_APPROVED' || r.status === 'REQUESTED' /* Legacy fallback */));
+
+    // 2. Active Support Tickets (In Progress)
+    const activeTickets = requests.filter(r => r.requestType === 'SUPPORT' && (r.status === 'IN_PROGRESS' || r.status === 'OPEN'));
+
+    // Deployment Queue: Assets ready for deployment
+    const deployedArgs = assets.filter(a => a.status === ASSET_STATUS.READY_FOR_DEPLOYMENT);
+
+    // Disposal Queue: Assets marked for scrap
+    const disposalItems = assets.filter(a => a.status === ASSET_STATUS.SCRAP_CANDIDATE);
+
+    // Legacy fallback states (if we need to write to anything local, but ideally we write to context)
+    // We don't need setPendingQueue anymore as it drives from Context.
 
     // STATE: Modals & Workflows
     const [activeModal, setActiveModal] = useState(null); // 'PENDING', 'TICKETS', 'DEPLOY', 'DISPOSAL', 'CONFIG', 'RESOLVE_TICKET'
@@ -77,18 +103,10 @@ export default function ITSupportDashboard() {
             setConfigStep(prev => prev + 1);
         } else {
             // FINISH CONFIGURATION
-            const newItem = {
-                id: `AST-DEP-${Math.floor(Math.random() * 10000)}`,
-                name: selectedItem.name,
-                os: "Windows 11 Pro Enterprise",
-                security: "Compliant",
-                assignedUser: selectedItem.user,
-                location: selectedItem.location,
-                date: new Date().toISOString().split('T')[0]
-            };
+            // Update asset status in Context
+            updateAssetStatus(selectedItem.id, ASSET_STATUS.READY_FOR_DEPLOYMENT);
 
-            setDeployedArgs([newItem, ...deployedArgs]);
-            setPendingQueue(pendingQueue.filter(i => i.id !== selectedItem.id));
+            // UI Cleanup
             setActiveModal(null);
             setSelectedItem(null);
         }
@@ -102,14 +120,14 @@ export default function ITSupportDashboard() {
 
     const handleMarkDisposed = (id) => {
         if (confirm("Confirm disposal? This action is irreversible.")) {
-            setDisposalItems(disposalItems.filter(i => i.id !== id));
+            updateAssetStatus(id, ASSET_STATUS.DISPOSED); // or RETIRED
         }
     };
 
     // 3. DEPLOYMENT WORKFLOW
     const handleHandover = (item) => {
         alert(`Handover protocol initiated for ${item.assignedUser}. Email notification sent.`);
-        setDeployedArgs(deployedArgs.filter(i => i.id !== item.id));
+        updateAssetStatus(item.id, ASSET_STATUS.IN_USE);
     };
 
     const handleGenerateAck = (item) => {
@@ -130,7 +148,8 @@ export default function ITSupportDashboard() {
             return;
         }
         // Resolve logic
-        setTickets(tickets.filter(i => i.id !== selectedItem.id));
+        resolveTicket(selectedItem.id, resolutionNotes);
+
         setActiveModal(null);
         setSelectedItem(null);
     };
@@ -167,11 +186,11 @@ export default function ITSupportDashboard() {
                     className="glass-card p-5 bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 border-indigo-500/20 cursor-pointer hover:border-indigo-400/50 transition-all hover:scale-[1.02]"
                 >
                     <p className="text-indigo-300 text-xs font-bold uppercase flex justify-between">
-                        Pending Setup <ChevronRight size={14} className="opacity-50" />
+                        Pending Approval <ChevronRight size={14} className="opacity-50" />
                     </p>
-                    <h3 className="text-3xl font-bold text-white mt-1">{pendingQueue.length}</h3>
+                    <h3 className="text-3xl font-bold text-white mt-1">{incomingRequests.length}</h3>
                     <div className="mt-2 text-xs text-indigo-200/70 flex items-center gap-1">
-                        <Terminal size={12} /> {pendingQueue.filter(i => i.priority === 'High').length} high priority
+                        <Terminal size={12} /> {incomingRequests.filter(i => i.urgency === 'High').length} high priority
                     </div>
                 </div>
 
@@ -183,9 +202,9 @@ export default function ITSupportDashboard() {
                     <p className="text-amber-300 text-xs font-bold uppercase flex justify-between">
                         Open Tickets <ChevronRight size={14} className="opacity-50" />
                     </p>
-                    <h3 className="text-3xl font-bold text-white mt-1">{tickets.length}</h3>
+                    <h3 className="text-3xl font-bold text-white mt-1">{activeTickets.length}</h3>
                     <div className="mt-2 text-xs text-amber-200/70 flex items-center gap-1">
-                        <Activity size={12} /> {tickets.filter(t => t.priority === 'High').length} critical issues
+                        <Activity size={12} /> {activeTickets.filter(t => t.urgency === 'High').length} critical issues
                     </div>
                 </div>
 
@@ -473,43 +492,64 @@ export default function ITSupportDashboard() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-white/5">
-                                        {activeModal === 'PENDING' && pendingQueue.map(item => (
-                                            <tr key={item.id} className="hover:bg-white/5 transition-colors group">
+                                        {activeModal === 'PENDING' && (incomingRequests.length === 0 ? (
+                                            <tr><td colSpan="4" className="p-4 text-slate-400 text-center">No incoming requests.</td></tr>
+                                        ) : incomingRequests.map(req => (
+                                            <tr key={req.id} className="hover:bg-white/5 transition-colors group">
                                                 <td className="p-4">
-                                                    <div className="font-bold text-white text-base">{item.name}</div>
-                                                    <div className="text-xs text-indigo-400 font-mono mt-1">{item.id}</div>
+                                                    <div className="font-bold text-white text-base flex items-center gap-2">
+                                                        {req.assetType || req.title}
+                                                        {req.assetType === 'BYOD' && <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1.5 rounded border border-sky-500/30">BYOD</span>}
+                                                    </div>
+                                                    <div className="text-xs text-indigo-400 font-mono mt-1">{req.id}</div>
                                                 </td>
                                                 <td className="p-4">
-                                                    <div className="text-sm text-slate-300 font-medium">{item.user}</div>
-                                                    <div className="text-xs text-slate-500">{item.requestedFor} • {item.type}</div>
+                                                    <div className="text-sm text-slate-300 font-medium">{req.requestedBy.name}</div>
+                                                    <div className="text-xs text-slate-500">{req.requestedBy.role} • {req.assetType}</div>
                                                 </td>
                                                 <td className="p-4">
-                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${item.priority === 'High' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-700 text-slate-300'}`}>
-                                                        {item.priority.toUpperCase()}
+                                                    <span className={`px-2 py-1 rounded text-xs font-bold ${req.urgency === 'High' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-slate-700 text-slate-300'}`}>
+                                                        {req.urgency ? req.urgency.toUpperCase() : 'STANDARD'}
                                                     </span>
-                                                    <div className="text-xs text-slate-500 mt-1">SLA Breach in {item.slaCountdown}</div>
+                                                    <div className="text-xs text-slate-500 mt-1">{req.status}</div>
                                                 </td>
                                                 <td className="p-4 text-right">
-                                                    <button onClick={() => startConfig(item)} className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded font-medium shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/30 transition-all">
-                                                        Start Configuration
-                                                    </button>
+                                                    <div className="flex justify-end gap-2">
+                                                        <button
+                                                            onClick={() => {
+                                                                const reason = prompt("Enter rejection reason:");
+                                                                if (reason) itRejectRequest(req.id, reason, "IT Admin");
+                                                            }}
+                                                            className="text-xs text-rose-400 hover:text-white border border-rose-500/30 px-3 py-1.5 rounded flex items-center gap-1"
+                                                        >
+                                                            Reject
+                                                        </button>
+                                                        <button
+                                                            onClick={() => itApproveRequest(req.id, "IT Admin")}
+                                                            className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-medium shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/30 transition-all"
+                                                        >
+                                                            Approve & Forward to Inventory
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
-                                        ))}
+                                        )))}
 
-                                        {activeModal === 'TICKETS' && tickets.map(item => (
+                                        {activeModal === 'TICKETS' && (activeTickets.length === 0 ? (
+                                            <tr><td colSpan="4" className="p-4 text-slate-400 text-center">No active tickets.</td></tr>
+                                        ) : activeTickets.map(item => (
                                             <tr key={item.id} className="hover:bg-white/5 transition-colors">
                                                 <td className="p-4">
-                                                    <div className="font-bold text-white">{item.issue}</div>
+                                                    <div className="font-bold text-white">{item.title}</div>
                                                     <div className="text-xs text-slate-500 font-mono mt-0.5">{item.id}</div>
                                                 </td>
                                                 <td className="p-4">
-                                                    <div className="text-sm text-slate-300">{item.assignedTo || 'Unassigned'}</div>
-                                                    <div className="text-xs text-slate-500">Asset: {item.asset}</div>
+                                                    <div className="text-sm text-slate-300">{item.requestedBy.name}</div>
+                                                    <div className="text-xs text-slate-500">Role: {item.requestedBy.role}</div>
                                                 </td>
                                                 <td className="p-4">
                                                     <div className="flex items-center gap-2">
-                                                        <span className={`w-2 h-2 rounded-full ${item.priority === 'High' ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
+                                                        <span className={`w-2 h-2 rounded-full ${item.urgency === 'High' ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
                                                         <span className="text-sm text-slate-300">{item.status}</span>
                                                     </div>
                                                 </td>
@@ -522,7 +562,7 @@ export default function ITSupportDashboard() {
                                                     </button>
                                                 </td>
                                             </tr>
-                                        ))}
+                                        )))}
 
                                         {activeModal === 'DEPLOY' && deployedArgs.map(item => (
                                             <tr key={item.id} className="hover:bg-white/5 transition-colors">

@@ -66,6 +66,33 @@ const MOCK_ALERTS = [
 ];
 
 export default function AlertsFeed() {
+    const [alerts, setAlerts] = React.useState(MOCK_ALERTS);
+
+    React.useEffect(() => {
+        const savedSettings = localStorage.getItem('appSettings');
+        if (savedSettings) {
+            try {
+                const { notifications } = JSON.parse(savedSettings);
+                // Filter logic
+                const filtered = MOCK_ALERTS.filter(alert => {
+                    if (alert.title.includes('Warranty') && !notifications.expiry) return false;
+                    if (alert.title.includes('Renewal') && !notifications.approvals) return false;
+                    if (alert.title.includes('Approved') && !notifications.approvals) return false;
+                    return true;
+                });
+                setAlerts(filtered);
+            } catch (e) {
+                console.error("Failed to load settings for alerts", e);
+            }
+        }
+    }, []);
+
+    if (alerts.length === 0) return (
+        <div className="p-8 text-center border border-white/5 rounded-xl bg-white/5">
+            <p className="text-slate-400 text-sm">No active alerts</p>
+        </div>
+    );
+
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between mb-2">
@@ -82,7 +109,7 @@ export default function AlertsFeed() {
             </div>
 
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                {MOCK_ALERTS.map((alert) => {
+                {alerts.map((alert) => {
                     const Icon = alert.icon;
                     return (
                         <div

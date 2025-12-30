@@ -1,6 +1,6 @@
 import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
-export default function BarChart({ data }) {
+export default function BarChart({ data, onBarClick }) {
     if (!data || data.length === 0) {
         return <div className="flex items-center justify-center h-full text-slate-400">No data available</div>
     }
@@ -36,9 +36,9 @@ export default function BarChart({ data }) {
                     tickLine={false}
                 />
                 <Tooltip cursor={{ fill: '#334155', opacity: 0.2 }} content={<CustomTooltip />} />
-                <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                <Bar dataKey="value" radius={[6, 6, 0, 0]} onClick={data => data && onBarClick && onBarClick(data)}>
                     {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={['#60a5fa', '#818cf8', '#a78bfa', '#f472b6', '#34d399'][index % 5]} />
+                        <Cell key={`cell-${index}`} fill={['#60a5fa', '#818cf8', '#a78bfa', '#f472b6', '#34d399'][index % 5]} cursor="pointer" />
                     ))}
                 </Bar>
             </RechartsBarChart>

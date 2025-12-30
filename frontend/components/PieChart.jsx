@@ -16,7 +16,7 @@ const CustomTooltip = ({ active, payload }) => {
     return null
 }
 
-export default function CustomPieChart({ data }) {
+export default function CustomPieChart({ data, onPieClick }) {
     if (!data || data.length === 0) return (
         <div className="flex items-center justify-center h-full text-slate-500">
             No data available
@@ -35,9 +35,10 @@ export default function CustomPieChart({ data }) {
                     fill="#8884d8"
                     paddingAngle={5}
                     dataKey="value"
+                    onClick={data => data && onPieClick && onPieClick(data)}
                 >
                     {data.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(0,0,0,0)" />
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} stroke="rgba(0,0,0,0)" cursor="pointer" />
                     ))}
                 </Pie>
                 <Tooltip content={<CustomTooltip />} />

@@ -19,7 +19,7 @@ const ROLES = [
 
 export default function Layout({ children }) {
     const router = useRouter()
-    const { currentRole, setCurrentRole, ROLES, logout } = useRole();
+    const { currentRole, setCurrentRole, ROLES, logout, user } = useRole();
     const [isRoleMenuOpen, setIsRoleMenuOpen] = useState(false);
 
     const ROLE_DASHBOARD_MAP = {
@@ -107,47 +107,19 @@ export default function Layout({ children }) {
                         </nav>
 
                         <div className="relative whitespace-nowrap">
-                            {isRoleMenuOpen && (
-                                <div className="absolute bottom-full left-4 right-4 mb-2 bg-slate-800 rounded-xl border border-white/10 shadow-xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200 z-50">
-                                    <div className="max-h-64 overflow-y-auto p-1 text-left">
-                                        {ROLES.map((role) => (
-                                            <button
-                                                key={role.label}
-                                                onClick={() => {
-                                                    setCurrentRole(role);
-                                                    setIsRoleMenuOpen(false);
-
-                                                    // Immediate navigation logic using shared map
-                                                    const targetPath = ROLE_DASHBOARD_MAP[role.label] || '/dashboard/end-user';
-                                                    router.push(targetPath);
-                                                }}
-                                                className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between group transition-colors ${currentRole.label === role.label ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                                                    }`}
-                                            >
-                                                <div>
-                                                    <div className="font-medium">{role.label}</div>
-                                                    <div className="text-[10px] opacity-60">{role.dept}</div>
-                                                </div>
-                                                {currentRole.label === role.label && <Check size={14} />}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}    <div
-                                onClick={() => setIsRoleMenuOpen(!isRoleMenuOpen)}
-                                className="p-4 m-4 rounded-xl bg-gradient-to-br from-white/5 to-transparent border border-white/5 cursor-pointer hover:bg-white/5 transition-colors group/user"
-                            >
+                            <div className="p-4 m-4 rounded-xl bg-gradient-to-br from-white/5 to-transparent border border-white/5">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center space-x-3">
                                         <div className="w-10 h-10 rounded-full bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30 shrink-0">
                                             <User size={20} className="text-indigo-300" />
                                         </div>
                                         <div className="text-sm overflow-hidden">
-                                            <p className="text-white font-semibold truncate">{currentRole.label}</p>
+                                            <p className="text-white font-semibold truncate">
+                                                {user?.position === 'MANAGER' ? 'Manager' : currentRole.label}
+                                            </p>
                                             <p className="text-indigo-300/60 text-xs truncate">{currentRole.dept}</p>
                                         </div>
                                     </div>
-                                    <ChevronUp size={16} className={`text-slate-500 transition-transform duration-300 ${isRoleMenuOpen ? 'rotate-180' : ''}`} />
                                 </div>
                             </div>
 
@@ -170,6 +142,37 @@ export default function Layout({ children }) {
 
             {/* Main Content */}
             <main className="flex-1 md:ml-28 p-6 md:p-8 animate-in fade-in duration-700">
+                {/* System Update Banner (Mock) - Controlled by Settings */}
+                {(() => {
+                    if (typeof window !== 'undefined') {
+                        const saved = localStorage.getItem('appSettings');
+                        if (saved) {
+                            try {
+                                const { notifications } = JSON.parse(saved);
+                                if (notifications?.system) {
+                                    return (
+                                        <div className="mb-6 p-4 rounded-xl bg-gradient-to-r from-blue-600/20 to-purple-600/20 border border-blue-500/30 flex items-center justify-between animate-in slide-in-from-top-4 fade-in duration-500">
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 rounded-full bg-blue-500/20 text-blue-400">
+                                                    <Sparkles size={18} />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-white">System Update Available</h4>
+                                                    <p className="text-xs text-slate-300">Version 2.5 is scheduled for deployment on Saturday 10:00 PM EST.</p>
+                                                </div>
+                                            </div>
+                                            <button className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20">
+                                                View Details
+                                            </button>
+                                        </div>
+                                    )
+                                }
+                            } catch (e) { }
+                        }
+                    }
+                    return null;
+                })()}
+
                 {children}
             </main>
         </div>

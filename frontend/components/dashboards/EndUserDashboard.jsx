@@ -2,58 +2,53 @@
 import { useState } from 'react';
 import { Laptop, Ticket, RefreshCw, User, Briefcase, MapPin, Calendar, Building2, Cpu, X, CheckCircle, AlertCircle, Settings, Sparkles, ChevronUp } from 'lucide-react';
 import { useRole } from '@/contexts/RoleContext';
+import { useAssetContext, ASSET_STATUS } from '@/contexts/AssetContext';
 
 export default function EndUserDashboard() {
-    const { currentRole, setCurrentRole, ROLES, logout } = useRole();
+    const { currentRole, setCurrentRole, ROLES, logout, user } = useRole();
+    const { assets, requests, createRequest, managerApproveRequest, managerRejectRequest } = useAssetContext();
     const [activeModal, setActiveModal] = useState(null); // 'asset' | 'ticket' | 'profile' | null
     const [showSuccess, setShowSuccess] = useState(null); // 'asset-success' | 'ticket-success' | null
+    const [selectedRequest, setSelectedRequest] = useState(null); // For viewing details
 
     const handleSubmit = (e, type) => {
         e.preventDefault();
+        const formData = new FormData(e.target);
+
+        const requesterInfo = {
+            userId: user?.name || 'Alex Johnson',
+            name: user?.name || 'Alex Johnson',
+            role: 'End User'
+        };
+
+        if (type === 'asset') {
+            createRequest({
+                assetType: formData.get('type') || 'Laptop',
+                justification: formData.get('reason') || 'No justification provided',
+                requestedBy: requesterInfo
+            });
+        }
+
         setActiveModal(null);
         setShowSuccess(type === 'asset' ? 'asset-success' : 'ticket-success');
         setTimeout(() => setShowSuccess(null), 3000);
     };
 
-    const userProfile = {
-        name: "Alex Johnson",
-        role: "Senior Software Engineer",
-        empId: "EMP-2024-8821",
+    const displayProfile = {
+        name: user?.name || "Alex Johnson",
+        role: user?.position === 'MANAGER' ? 'Manager' : (currentRole?.label || "Senior Software Engineer"),
+        empId: user?.employee_id || "EMP-2024-8821",
         company: "Acme Corp Global",
         doj: "15th Aug, 2022",
-        location: "New York HQ, Floor 4",
-        email: "alex.j@acmecorp.com"
+        location: user?.location || "New York HQ, Floor 4",
+        email: user?.email || "alex.j@acmecorp.com"
     };
 
-    const assignedAssets = [
-        {
-            id: "AST-001",
-            name: "MacBook Pro 16",
-            type: "Laptop",
-            active: true,
-            assignedDate: "20th Aug, 2022",
-            location: "New York HQ - Desk 4B",
-            specs: {
-                processor: "M3 Max Chip",
-                ram: "36GB Unified Memory",
-                storage: "1TB SSD",
-                display: "16.2-inch Liquid Retina XDR"
-            }
-        },
-        {
-            id: "AST-104",
-            name: "Dell UltraSharp 27",
-            type: "Monitor",
-            active: true,
-            assignedDate: "22nd Aug, 2022",
-            location: "New York HQ - Desk 4B",
-            specs: {
-                resolution: "4K UHD (3840 x 2160)",
-                panel: "IPS Black Technology",
-                ports: "USB-C Hub, HDMI, DP"
-            }
-        }
-    ];
+    // Filter assets assigned to current user
+    const assignedAssets = assets.filter(a =>
+        (a.assigned_to === (user?.name || 'Alex Johnson')) &&
+        (a.status === ASSET_STATUS.IN_USE || a.status === 'Active')
+    );
 
     return (
         <div className="space-y-6 relative">
@@ -79,34 +74,36 @@ export default function EndUserDashboard() {
                 <div className="flex flex-col md:flex-row gap-6 relative z-10">
                     <div className="flex-shrink-0">
                         <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                            <span className="text-3xl font-bold text-white">AJ</span>
+                            <span className="text-3xl font-bold text-white">
+                                {displayProfile.name.split(' ').map(n => n[0]).join('')}
+                            </span>
                         </div>
                     </div>
 
                     <div className="flex-1 space-y-4">
                         <div>
-                            <h1 className="text-3xl font-bold text-white mb-1">{userProfile.name}</h1>
+                            <h1 className="text-3xl font-bold text-white mb-1">{displayProfile.name}</h1>
                             <p className="text-blue-400 font-medium flex items-center gap-2">
-                                <Briefcase size={16} /> {userProfile.role}
+                                <Briefcase size={16} /> {displayProfile.role}
                             </p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
                             <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                                 <p className="text-slate-400 text-xs uppercase mb-1 flex items-center gap-1.5"><Building2 size={12} /> Company</p>
-                                <p className="text-white font-semibold text-sm">{userProfile.company}</p>
+                                <p className="text-white font-semibold text-sm">{displayProfile.company}</p>
                             </div>
                             <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                                 <p className="text-slate-400 text-xs uppercase mb-1 flex items-center gap-1.5"><Ticket size={12} /> Employee ID</p>
-                                <p className="text-white font-semibold text-sm">{userProfile.empId}</p>
+                                <p className="text-white font-semibold text-sm">{displayProfile.empId}</p>
                             </div>
                             <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                                 <p className="text-slate-400 text-xs uppercase mb-1 flex items-center gap-1.5"><Calendar size={12} /> Date of Joining</p>
-                                <p className="text-white font-semibold text-sm">{userProfile.doj}</p>
+                                <p className="text-white font-semibold text-sm">{displayProfile.doj}</p>
                             </div>
                             <div className="bg-white/5 p-3 rounded-xl border border-white/5">
                                 <p className="text-slate-400 text-xs uppercase mb-1 flex items-center gap-1.5"><MapPin size={12} /> Work Location</p>
-                                <p className="text-white font-semibold text-sm">{userProfile.location}</p>
+                                <p className="text-white font-semibold text-sm">{displayProfile.location}</p>
                             </div>
                         </div>
                     </div>
@@ -215,26 +212,55 @@ export default function EndUserDashboard() {
 
                 {/* Sidebar Widgets */}
                 <div className="space-y-6">
-                    {/* Support Tickets */}
+                    {/* Support Tickets & Requests Unified List */}
                     <div className="glass-panel p-6">
-                        <h3 className="text-lg font-bold text-white mb-4">My Tickets</h3>
+                        <h3 className="text-lg font-bold text-white mb-4">My Requests & Tickets</h3>
                         <div className="space-y-4">
-                            <div className="p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors cursor-pointer">
-                                <div className="flex justify-between items-start mb-2">
-                                    <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] rounded font-medium border border-blue-500/20">Open</span>
-                                    <span className="text-[10px] text-slate-500">2d ago</span>
+                            {requests.length === 0 ? (
+                                <p className="text-slate-400 text-sm">No active requests.</p>
+                            ) : requests.map(req => (
+                                <div
+                                    key={req.id}
+                                    onClick={() => setSelectedRequest(req)}
+                                    className={`p-3 rounded-xl bg-white/5 border border-white/5 hover:border-indigo-500/30 hover:shadow-md hover:bg-white/[0.07] transition-all cursor-pointer ${req.status === 'FULFILLED' || req.status === 'REJECTED' ? 'opacity-70' : ''}`}
+                                >
+                                    <div className="flex justify-between items-start mb-2">
+                                        <span className={`px-2 py-0.5 text-[10px] rounded font-medium border 
+                                            ${req.status === 'FULFILLED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                req.status === 'IT_APPROVED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                    req.status === 'PROCUREMENT_REQUIRED' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                                        req.status === 'REJECTED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                            'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
+                                            {req.status}
+                                        </span>
+                                        <span className="text-[10px] text-slate-500">{new Date(req.createdAt).toLocaleDateString()}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-[10px] px-1.5 py-0.5 bg-slate-700 rounded text-slate-300">{req.assetType}</span>
+                                        <h4 className="text-sm font-bold text-white truncate">{req.assetType} Request</h4>
+                                    </div>
+                                    <p className="text-xs text-slate-400 truncate mb-2">{req.justification}</p>
+
+                                    {/* Current Owner Badge */}
+                                    <div className="flex items-center gap-1 mb-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                                        <span className="text-[10px] text-indigo-300 font-medium">With: {req.currentOwnerRole}</span>
+                                    </div>
+
+                                    {/* Procurement Progress */}
+                                    {req.procurementStage && (
+                                        <div className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 mt-1">
+                                            📦 {req.procurementStage.replace(/_/g, ' ')}
+                                        </div>
+                                    )}
+
+                                    {req.status === 'REJECTED' && req.rejectionReason && (
+                                        <p className="text-xs text-rose-400 mt-2 p-2 bg-rose-500/10 rounded border border-rose-500/10">
+                                            Reason: {req.rejectionReason}
+                                        </p>
+                                    )}
                                 </div>
-                                <h4 className="text-sm font-bold text-white mb-1">VPN Connectivity Issue</h4>
-                                <p className="text-xs text-slate-400">Ticket #INC-2291</p>
-                            </div>
-                            <div className="p-3 rounded-xl bg-white/5 border border-white/5 opacity-70">
-                                <div className="flex justify-between items-start mb-2">
-                                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-[10px] rounded font-medium border border-emerald-500/20">Resolved</span>
-                                    <span className="text-[10px] text-slate-500">1w ago</span>
-                                </div>
-                                <h4 className="text-sm font-bold text-white mb-1">Monitor Request</h4>
-                                <p className="text-xs text-slate-400">Ticket #REQ-1120</p>
-                            </div>
+                            ))}
                         </div>
                         <button className="w-full mt-4 py-2 text-xs font-semibold text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/10">
                             View All History
@@ -262,204 +288,389 @@ export default function EndUserDashboard() {
                 </div>
             </div>
 
-            {/* MODALS */}
-            {activeModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* MANAGER APPROVAL SECTION */}
+            {(user?.position === 'MANAGER' || currentRole?.label === 'Manager') && (
+                <div className="glass-panel p-6 border-t-4 border-indigo-500 mt-8">
+                    <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+                        <Briefcase className="text-indigo-400" /> Team Approvals Needed
+                    </h3>
 
-                        {/* Modal Header */}
-                        <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                {activeModal === 'asset' && <Laptop className="text-blue-400" size={20} />}
-                                {activeModal === 'ticket' && <Ticket className="text-blue-400" size={20} />}
-                                {activeModal === 'profile' && <User className="text-blue-400" size={20} />}
-
-                                {activeModal === 'asset' && 'Request New Asset'}
-                                {activeModal === 'ticket' && 'Raise Support Ticket'}
-                                {activeModal === 'profile' && 'My Profile'}
-                            </h3>
-                            <button
-                                onClick={() => setActiveModal(null)}
-                                className="text-slate-400 hover:text-white transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        {/* Modal Body */}
-                        {activeModal !== 'profile' ? (
-                            <form onSubmit={(e) => handleSubmit(e, activeModal)} className="p-6 space-y-4">
-                                {activeModal === 'asset' ? (
-                                    <>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-1.5">Asset Type</label>
-                                            <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                                <option>Laptop (Standard)</option>
-                                                <option>Laptop (High Performance)</option>
-                                                <option>Monitor</option>
-                                                <option>Peripheral (Keyboard/Mouse)</option>
-                                                <option>Software License</option>
-                                            </select>
+                    {requests.filter(r => r.status === 'REQUESTED').length === 0 ? (
+                        <p className="text-slate-400 text-sm">No pending approvals for your team.</p>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {requests.filter(r => r.status === 'REQUESTED').map(req => (
+                                <div key={req.id} className="p-4 bg-slate-800 rounded-xl border border-white/10 flex justify-between items-center group hover:border-indigo-500/50 transition-all">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="font-bold text-white">{req.assetType} Request</h4>
+                                            {req.assetType === 'BYOD' && <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1.5 rounded border border-sky-500/30">BYOD</span>}
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-1.5">Reason for Request</label>
-                                            <textarea
-                                                rows="3"
-                                                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                placeholder="e.g., Current laptop is slow, Need monitor for dual-screen setup..."
-                                            ></textarea>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-1.5">Urgency</label>
-                                            <div className="flex gap-4">
-                                                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                                                    <input type="radio" name="urgency" className="text-blue-500" defaultChecked /> Standard
-                                                </label>
-                                                <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                                                    <input type="radio" name="urgency" className="text-blue-500" /> high
-                                                </label>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-1.5">Issue Category</label>
-                                            <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                                <option>Hardware Fault</option>
-                                                <option>Software / OS Issue</option>
-                                                <option>Network / VPN</option>
-                                                <option>Access / Permissions</option>
-                                                <option>Other</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-slate-300 mb-1.5">Description</label>
-                                            <textarea
-                                                rows="4"
-                                                className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                placeholder="Describe the issue in detail..."
-                                            ></textarea>
-                                        </div>
-                                        <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex gap-3">
-                                            <AlertCircle className="text-amber-400 shrink-0" size={18} />
-                                            <p className="text-xs text-amber-200">
-                                                For critical outages blocking your work, please call the IT Helpdesk directly at x4499.
-                                            </p>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Modal Footer */}
-                                <div className="pt-4 flex gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() => setActiveModal(null)}
-                                        className="flex-1 bg-white/5 hover:bg-white/10 text-white py-2.5 rounded-lg font-medium transition-colors border border-white/10"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-lg font-bold shadow-lg shadow-blue-500/20 transition-colors"
-                                    >
-                                        {activeModal === 'asset' ? 'Submit Request' : 'Create Ticket'}
-                                    </button>
-                                </div>
-                            </form>
-                        ) : (
-                            // PROFILE MODAL CONTENT
-                            <div className="p-8 space-y-8 custom-scrollbar max-h-[80vh] overflow-y-auto">
-                                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 flex flex-col md:flex-row items-center gap-6 shadow-lg relative overflow-hidden">
-                                    <div className="absolute top-0 right-0 p-16 bg-white/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-                                    <div className="w-24 h-24 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border-4 border-white/10 shrink-0 shadow-xl">
-                                        <span className="text-3xl font-bold text-white">AJ</span>
+                                        <p className="text-xs text-slate-400 mt-1">For: <span className="text-slate-200">{req.requestedBy?.name || req.requester_name || 'Employee'}</span></p>
+                                        <p className="text-xs text-slate-500 mt-0.5 truncate max-w-[200px]">{req.justification || req.reason || 'No justification'}</p>
                                     </div>
-                                    <div className="flex-1 text-center md:text-left">
-                                        <h3 className="text-2xl font-bold text-white mb-1">Alex Johnson</h3>
-                                        <p className="text-blue-100 mb-0.5">alex.j@acmecorp.com</p>
-                                        <p className="text-blue-200 text-sm opacity-80">{currentRole.dept} • {currentRole.label}</p>
-                                    </div>
-                                    <div className="flex gap-3 relative z-10">
-                                        <button className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-semibold backdrop-blur-sm border border-white/10 transition-colors">
-                                            Change Password
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => {
+                                                const reason = prompt("Reason for rejection:");
+                                                if (reason) {
+                                                    managerRejectRequest(req.id, reason, user.name);
+                                                }
+                                            }}
+                                            className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Reject">
+                                            <X size={18} />
                                         </button>
                                         <button
                                             onClick={() => {
-                                                logout();
-                                                window.location.href = '/login';
+                                                managerApproveRequest(req.id, user.name);
                                             }}
-                                            className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 hover:text-white rounded-lg text-sm font-semibold backdrop-blur-sm border border-rose-500/20 transition-colors"
+                                            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-indigo-500/20"
                                         >
-                                            Logout
+                                            Approve
                                         </button>
                                     </div>
                                 </div>
+                            ))}
+                        </div>
+                    )}
 
-                                <div className="grid grid-cols-1 gap-8">
-                                    <div className="glass-panel p-6 space-y-6 bg-slate-800/50">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400">
-                                                <Settings size={20} />
-                                            </div>
-                                            <h4 className="text-lg font-bold text-white">Account Information</h4>
-                                        </div>
-
+                    {/* MANAGER HISTORY */}
+                    <div className="mt-8 pt-6 border-t border-white/5">
+                        <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Request History</h4>
+                        <div className="space-y-3">
+                            {requests.filter(r => r.status !== 'REQUESTED' && r.status !== 'PENDING').length === 0 ? (
+                                <p className="text-slate-500 text-xs italic">No history available.</p>
+                            ) : requests.filter(r => r.status !== 'REQUESTED' && r.status !== 'PENDING').map(req => (
+                                <div key={req.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5 opacity-75 hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-2 h-2 rounded-full ${req.status === 'REJECTED' ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
                                         <div>
-                                            <label className="block text-xs font-medium text-purple-400 mb-1.5 uppercase font-bold">User Role</label>
-                                            <div className="relative">
-                                                <select
-                                                    value={currentRole.label}
-                                                    onChange={(e) => {
-                                                        const newRole = ROLES.find(r => r.label === e.target.value);
-                                                        setCurrentRole(newRole || ROLES[0]);
-                                                    }}
-                                                    className="w-full bg-slate-800 border border-purple-500/30 rounded-lg pl-4 pr-10 py-3 text-white appearance-none focus:outline-none focus:ring-2 focus:ring-purple-500 duration-200"
-                                                >
-                                                    {ROLES.map(role => (
-                                                        <option key={role.label} value={role.label}>{role.label}</option>
-                                                    ))}
-                                                </select>
-                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                                    <ChevronUp size={16} className="rotate-180" />
-                                                </div>
-                                            </div>
-                                            <p className="text-[10px] text-slate-500 mt-2">Switch between user roles to access different dashboards and permissions.</p>
+                                            <p className="text-sm font-medium text-white">{req.assetType} Request</p>
+                                            <p className="text-xs text-slate-500">For: {req.requestedBy?.name || req.requester_name}</p>
                                         </div>
                                     </div>
-                                    {/* Security */}
-                                    <div className="glass-panel p-6 space-y-6">
-                                        <div className="flex items-center gap-3 mb-4">
-                                            <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400">
-                                                <Sparkles size={20} />
-                                            </div>
-                                            <h4 className="text-lg font-bold text-white">Security</h4>
-                                        </div>
+                                    <div className="text-right">
+                                        <span className={`text-[10px] px-2 py-1 rounded border ${req.status === 'MANAGER_APPROVED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                            req.status === 'REJECTED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                'bg-slate-500/10 text-slate-400'
+                                            }`}>
+                                            {req.status}
+                                        </span>
+                                        <p className="text-[10px] text-slate-500 mt-1">Current: {req.currentOwnerRole}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="border border-white/5 rounded-xl p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
-                                                <div>
-                                                    <h5 className="font-semibold text-white mb-1">Password</h5>
-                                                    <p className="text-xs text-slate-400">Last changed 3 months ago</p>
-                                                </div>
-                                                <button className="text-sm font-semibold text-blue-400 group-hover:text-blue-300">Change</button>
+            {/* MODALS */}
+            {
+                activeModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+
+                            {/* Modal Header */}
+                            <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    {activeModal === 'asset' && <Laptop className="text-blue-400" size={20} />}
+                                    {activeModal === 'ticket' && <Ticket className="text-blue-400" size={20} />}
+                                    {activeModal === 'profile' && <User className="text-blue-400" size={20} />}
+
+                                    {activeModal === 'asset' && 'Request New Asset'}
+                                    {activeModal === 'ticket' && 'Raise Support Ticket'}
+                                    {activeModal === 'profile' && 'My Profile'}
+                                </h3>
+                                <button
+                                    onClick={() => setActiveModal(null)}
+                                    className="text-slate-400 hover:text-white transition-colors"
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            {/* Modal Body */}
+                            {activeModal !== 'profile' ? (
+                                <form onSubmit={(e) => handleSubmit(e, activeModal)} className="p-6 space-y-4">
+                                    {activeModal === 'asset' ? (
+                                        <>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Asset Type</label>
+                                                <select name="type" className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option value="Laptop">Laptop (Standard)</option>
+                                                    <option value="BYOD">BYOD (Bring Your Own Device)</option>
+                                                    <option value="Laptop_HighPerf">Laptop (High Performance)</option>
+                                                    <option value="Monitor">Monitor</option>
+                                                    <option value="Peripheral">Peripheral (Keyboard/Mouse)</option>
+                                                    <option value="Software">Software License</option>
+                                                </select>
                                             </div>
-                                            <div className="border border-white/5 rounded-xl p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
-                                                <div>
-                                                    <h5 className="font-semibold text-white mb-1">Two-Factor Authentication</h5>
-                                                    <p className="text-xs text-slate-400">Add an extra layer of security</p>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Reason for Request</label>
+                                                <textarea
+                                                    name="reason"
+                                                    rows="3"
+                                                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    placeholder="e.g., Current laptop is slow, Need monitor for dual-screen setup..."
+                                                ></textarea>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Urgency</label>
+                                                <div className="flex gap-4">
+                                                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                                                        <input type="radio" name="urgency" className="text-blue-500" defaultChecked /> Standard
+                                                    </label>
+                                                    <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                                                        <input type="radio" name="urgency" className="text-blue-500" /> high
+                                                    </label>
                                                 </div>
-                                                <button className="text-sm font-semibold text-blue-400 group-hover:text-blue-300">Enable</button>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Issue Category</label>
+                                                <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option>Hardware Fault</option>
+                                                    <option>Software / OS Issue</option>
+                                                    <option>Network / VPN</option>
+                                                    <option>Access / Permissions</option>
+                                                    <option>Other</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Description</label>
+                                                <textarea
+                                                    rows="4"
+                                                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    placeholder="Describe the issue in detail..."
+                                                ></textarea>
+                                            </div>
+                                            <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-lg flex gap-3">
+                                                <AlertCircle className="text-amber-400 shrink-0" size={18} />
+                                                <p className="text-xs text-amber-200">
+                                                    For critical outages blocking your work, please call the IT Helpdesk directly at x4499.
+                                                </p>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* Modal Footer */}
+                                    <div className="pt-4 flex gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setActiveModal(null)}
+                                            className="flex-1 bg-white/5 hover:bg-white/10 text-white py-2.5 rounded-lg font-medium transition-colors border border-white/10"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-lg font-bold shadow-lg shadow-blue-500/20 transition-colors"
+                                        >
+                                            {activeModal === 'asset' ? 'Submit Request' : 'Create Ticket'}
+                                        </button>
+                                    </div>
+                                </form>
+                            ) : (
+                                // PROFILE MODAL CONTENT
+                                <div className="p-8 space-y-8 custom-scrollbar max-h-[80vh] overflow-y-auto">
+                                    <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 flex flex-col md:flex-row items-center gap-6 shadow-lg relative overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-16 bg-white/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                                        <div className="w-24 h-24 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border-4 border-white/10 shrink-0 shadow-xl">
+                                            <span className="text-3xl font-bold text-white">AJ</span>
+                                        </div>
+                                        <div className="flex-1 text-center md:text-left">
+                                            <h3 className="text-2xl font-bold text-white mb-1">Alex Johnson</h3>
+                                            <p className="text-blue-100 mb-0.5">alex.j@acmecorp.com</p>
+                                            <p className="text-blue-200 text-sm opacity-80">{currentRole.dept} • {currentRole.label}</p>
+                                        </div>
+                                        <div className="flex gap-3 relative z-10">
+                                            <button className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-semibold backdrop-blur-sm border border-white/10 transition-colors">
+                                                Change Password
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    logout();
+                                                    window.location.href = '/login';
+                                                }}
+                                                className="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 hover:text-white rounded-lg text-sm font-semibold backdrop-blur-sm border border-rose-500/20 transition-colors"
+                                            >
+                                                Logout
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 gap-8">
+                                        <div className="glass-panel p-6 space-y-6 bg-slate-800/50">
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <div className="p-2 bg-purple-500/10 rounded-lg text-purple-400">
+                                                    <Settings size={20} />
+                                                </div>
+                                                <h4 className="text-lg font-bold text-white">Account Information</h4>
+                                            </div>
+                                        </div>
+                                        {/* Security */}
+                                        <div className="glass-panel p-6 space-y-6">
+                                            <div className="flex items-center gap-3 mb-4">
+                                                <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400">
+                                                    <Sparkles size={20} />
+                                                </div>
+                                                <h4 className="text-lg font-bold text-white">Security</h4>
+                                            </div>
+
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div className="border border-white/5 rounded-xl p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
+                                                    <div>
+                                                        <h5 className="font-semibold text-white mb-1">Password</h5>
+                                                        <p className="text-xs text-slate-400">Last changed 3 months ago</p>
+                                                    </div>
+                                                    <button className="text-sm font-semibold text-blue-400 group-hover:text-blue-300">Change</button>
+                                                </div>
+                                                <div className="border border-white/5 rounded-xl p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
+                                                    <div>
+                                                        <h5 className="font-semibold text-white mb-1">Two-Factor Authentication</h5>
+                                                        <p className="text-xs text-slate-400">Add an extra layer of security</p>
+                                                    </div>
+                                                    <button className="text-sm font-semibold text-blue-400 group-hover:text-blue-300">Enable</button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+
+            {/* Request Details Modal */}
+            {
+                selectedRequest && (
+                    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="bg-slate-900 border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200">
+                            {/* Header */}
+                            <div className="p-6 border-b border-white/10 bg-white/5 flex justify-between items-start">
+                                <div>
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <span className={`px-2 py-0.5 text-xs rounded font-bold border 
+                                        ${selectedRequest.status === 'FULFILLED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                selectedRequest.status === 'IT_APPROVED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                    selectedRequest.status === 'PROCUREMENT_REQUIRED' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                                        selectedRequest.status === 'REJECTED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                            'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
+                                            {selectedRequest.status}
+                                        </span>
+                                        <span className="text-xs text-slate-400 font-mono">{selectedRequest.id}</span>
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white">{selectedRequest.assetType} Request</h3>
+                                </div>
+                                <button onClick={() => setSelectedRequest(null)} className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10">
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            {/* Content */}
+                            <div className="p-6 overflow-y-auto custom-scrollbar space-y-6">
+                                {/* Details */}
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Asset Type</label>
+                                        <p className="text-white text-sm mt-1 font-medium">{selectedRequest.assetType}</p>
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Justification</label>
+                                        <p className="text-slate-300 text-sm mt-1 leading-relaxed bg-white/5 p-3 rounded-lg border border-white/5">
+                                            {selectedRequest.justification}
+                                        </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Current Owner</label>
+                                            <div className="text-white text-sm font-medium mt-1 flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></div>
+                                                {selectedRequest.currentOwnerRole}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">Inventory Check</label>
+                                            <div className="text-white text-sm font-medium mt-1">{selectedRequest.inventoryDecision || 'Pending'}</div>
+                                        </div>
+                                    </div>
+                                    {selectedRequest.procurementStage && (
+                                        <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl">
+                                            <label className="text-xs font-bold text-amber-400 uppercase tracking-wider">Procurement Stage</label>
+                                            <p className="text-amber-200 text-sm mt-1 font-medium">📦 {selectedRequest.procurementStage.replace(/_/g, ' ')}</p>
+                                        </div>
+                                    )}
+                                    {selectedRequest.rejectionReason && (
+                                        <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl">
+                                            <label className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1">
+                                                <AlertCircle size={12} /> Rejection Reason
+                                            </label>
+                                            <p className="text-rose-200 text-sm mt-1">{selectedRequest.rejectionReason}</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Audit Trail */}
+                                <div>
+                                    <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                                        <span className="w-1 h-4 bg-blue-500 rounded-full"></span>
+                                        Activity Log
+                                    </h4>
+                                    <div className="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-0 before:w-0.5 before:bg-white/10">
+                                        {selectedRequest.auditTrail?.length > 0 ? selectedRequest.auditTrail.map((log, idx) => (
+                                            <div key={idx} className="relative pl-8">
+                                                <div className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 border-slate-900 
+                                                ${log.action.includes('CREATED') ? 'bg-blue-500' :
+                                                        log.action.includes('APPROVED') ? 'bg-emerald-500' :
+                                                            log.action.includes('REJECTED') ? 'bg-rose-500' :
+                                                                'bg-slate-500'}`}></div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleString()}</span>
+                                                    <span className="text-sm font-bold text-slate-200">{log.action}</span>
+                                                    <span className="text-xs text-slate-400">by {log.byRole} ({log.byUser})</span>
+                                                    {log.comment && <p className="text-xs text-slate-500 mt-0.5 italic">"{log.comment}"</p>}
+                                                </div>
+                                            </div>
+                                        )) : (
+                                            // Fallback for old data without auditTrail
+                                            selectedRequest.timeline?.map((log, idx) => (
+                                                <div key={idx} className="relative pl-8">
+                                                    <div className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 border-slate-900 
+                                                ${log.action === 'CREATED' ? 'bg-blue-500' :
+                                                            log.action === 'APPROVED' ? 'bg-emerald-500' :
+                                                                log.action === 'REJECTED' ? 'bg-rose-500' :
+                                                                    'bg-slate-500'}`}></div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleString()}</span>
+                                                        <span className="text-sm font-bold text-slate-200">{log.action}</span>
+                                                        <span className="text-xs text-slate-400">by {log.role || log.byRole}</span>
+                                                        {log.comment && <p className="text-xs text-slate-500 mt-0.5 italic">"{log.comment}"</p>}
+                                                    </div>
+                                                </div>
+                                            )))
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="p-4 border-t border-white/10 bg-white/5 flex justify-end">
+                                <button
+                                    onClick={() => setSelectedRequest(null)}
+                                    className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-semibold transition-colors"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     )
 }
 

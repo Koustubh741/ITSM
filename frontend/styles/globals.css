@@ -15,14 +15,89 @@ body {
   color: #f8fafc;
   /* Slate 50 text for dark mode base */
   min-height: 100vh;
+  transition: background-color 0.5s ease, color 0.5s ease;
+}
+
+/* Light Mode Overrides */
+body.light-mode {
+  background-image:
+    radial-gradient(at 0% 0%, hsla(210, 100%, 96%, 1) 0, transparent 50%),
+    radial-gradient(at 50% 0%, hsla(220, 100%, 97%, 1) 0, transparent 50%),
+    radial-gradient(at 100% 0%, hsla(230, 100%, 98%, 1) 0, transparent 50%);
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+.light-mode .text-white {
+  color: #0f172a !important;
+}
+
+.light-mode .text-slate-200 {
+  color: #334155 !important;
+}
+
+.light-mode .text-slate-300 {
+  color: #475569 !important;
+}
+
+.light-mode .text-slate-400 {
+  color: #64748b !important;
+}
+
+.light-mode .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.light-mode .bg-slate-900 {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+
+.light-mode .bg-slate-800 {
+  background-color: #f1f5f9 !important;
+}
+
+.light-mode .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-mode .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.light-mode .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+.light-mode .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Invert glass panels for light mode */
+.light-mode .glass-panel {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+}
+
+.light-mode .glass-card {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border-color: rgba(0, 0, 0, 0.05) !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+.light-mode .input-field {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #cbd5e1 !important;
 }
 
 .glass-panel {
-  @apply backdrop-blur-md bg-white/10 border border-white/20 shadow-xl rounded-xl transition-all duration-500 hover:bg-gradient-to-br hover:from-white/15 hover:to-white/5 hover:border-white/30 hover:shadow-2xl hover:shadow-blue-500/10;
+  @apply backdrop-blur-md bg-white/10 border border-white/20 shadow-xl rounded-xl transition-all duration-500 hover:border-indigo-500/30 hover:shadow-2xl hover:shadow-indigo-500/10;
 }
 
 .glass-card {
-  @apply backdrop-blur-sm bg-white/5 border border-white/10 shadow-lg rounded-xl transition-all duration-500 hover:bg-gradient-to-br hover:from-white/15 hover:to-white/5 hover:border-white/30 hover:shadow-blue-500/20 hover:-translate-y-1;
+  @apply backdrop-blur-sm bg-white/5 border border-white/10 shadow-lg rounded-xl transition-all duration-500 hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-500/20 hover:-translate-y-1;
 }
 
 .btn {

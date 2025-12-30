@@ -1,145 +1,131 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-import Link from 'next/link'
 import { useRouter } from 'next/router'
+import Link from 'next/link'
 import { Plus, Search, Filter } from 'lucide-react'
+import { useAssetContext } from '@/contexts/AssetContext'
 import AssetTable from '@/components/AssetTable'
-import { initialMockAssets } from '@/data/mockAssets'
 
 export default function AssetsPage() {
+    const { assets: contextAssets } = useAssetContext()
     const [assets, setAssets] = useState([])
     const [filteredAssets, setFilteredAssets] = useState([])
     const [search, setSearch] = useState('')
     const [filterStatus, setFilterStatus] = useState('All')
     const [filterSegment, setFilterSegment] = useState('All')
+    const [filterType, setFilterType] = useState('All')
 
+    // Derived unique types for filter dropdown
+    const uniqueTypes = ['All', ...new Set(assets.map(a => a.type).filter(Boolean))].sort()
 
 
     useEffect(() => {
-        const fetchAssets = async () => {
-            // Mock Data Priority: localStorage -> initialMockAssets
-            const savedAssets = localStorage.getItem('assets');
-            if (savedAssets) {
-                let parsed = JSON.parse(savedAssets);
-                let dataChanged = false;
+        const processAssets = () => {
+            // Use assets from Context (API or Mock)
+            let parsed = [...contextAssets];
 
-                // 1. DATA FORMATTING FIX (Quotes, String Costs, Zeros, Bulk Import, Specs)
-                // We run this map always to be safe, or check first.
-                const needsFormatting = parsed.some(a =>
-                    (typeof a.name === 'string' && (a.name.includes('"') || a.name.startsWith("'"))) ||
-                    typeof a.cost === 'string' ||
-                    a.cost === 0 ||
-                    a.assigned_by === 'Bulk Import' ||
-                    (a.segment === 'IT' && !a.specs && (a.type === 'Laptop' || a.type === 'Desktop'))
-                );
-
-                if (needsFormatting) {
-                    parsed = parsed.map(a => {
-                        const cleanStr = (s) => s ? String(s).replace(/^["']|["']$/g, '').trim() : s;
-                        const parseVal = (v) => {
-                            if (!v) return 0;
-                            if (typeof v === 'number') return v;
-                            const n = parseFloat(String(v).replace(/[₹$,\s]/g, ''));
-                            return isNaN(n) ? 0 : n;
-                        };
-
-                        // Clean status string first
-                        let st = cleanStr(a.status);
-                        if (st && (st.match(/active/i) || st.match(/in use/i))) st = 'In Use';
-
-                        // COST PATCHING: If cost is 0, assign realistic mock value based on type
-                        let finalCost = parseVal(a.cost);
-                        if (finalCost === 0) {
-                            const t = (a.type || '').toLowerCase();
-                            if (t.includes('laptop')) finalCost = Math.floor(Math.random() * (85000 - 45000) + 45000);
-                            else if (t.includes('desktop') || t.includes('mac')) finalCost = Math.floor(Math.random() * (70000 - 35000) + 35000);
-                            else if (t.includes('monitor')) finalCost = Math.floor(Math.random() * (25000 - 8000) + 8000);
-                            else if (t.includes('access') || t.includes('keybw') || t.includes('mouse')) finalCost = Math.floor(Math.random() * (5000 - 500) + 500);
-                            else finalCost = Math.floor(Math.random() * (15000 - 5000) + 5000); // Default
-                        }
-
-                        // ASSIGNED BY PATCHING
-                        let assignedBy = cleanStr(a.assigned_by);
-                        if (assignedBy === 'Bulk Import') assignedBy = 'Admin';
-
-                        // SPECS PATCHING: Generate specs for IT assets if missing
-                        let specs = a.specs || {};
-                        const typeLower = (a.type || '').toLowerCase();
-                        if (!a.specs && a.segment === 'IT') {
-                            const processors = ['Intel Core i5', 'Intel Core i7', 'Intel Core i9', 'AMD Ryzen 5', 'AMD Ryzen 7', 'Apple M1', 'Apple M2'];
-                            const rams = ['8GB', '16GB', '32GB', '64GB'];
-                            const storages = ['256GB SSD', '512GB SSD', '1TB SSD', '2TB SSD'];
-                            const os = ['Windows 10 Pro', 'Windows 11 Pro', 'macOS Ventura', 'macOS Sonoma', 'Ubuntu Linux'];
-
-                            if (typeLower.includes('laptop') || typeLower.includes('desktop') || typeLower.includes('mac')) {
-                                specs = {
-                                    processor: processors[Math.floor(Math.random() * processors.length)],
-                                    ram: rams[Math.floor(Math.random() * rams.length)],
-                                    storage: storages[Math.floor(Math.random() * storages.length)],
-                                    os: os[Math.floor(Math.random() * os.length)]
-                                };
-                            } else if (typeLower.includes('monitor')) {
-                                specs = { resolution: '4K UHD', refresh_rate: '60Hz', panel: 'IPS' };
-                            }
-                        }
-
-                        return {
-                            ...a,
-                            name: cleanStr(a.name),
-                            segment: cleanStr(a.segment),
-                            type: cleanStr(a.type),
-                            model: cleanStr(a.model),
-                            serial_number: cleanStr(a.serial_number),
-                            status: st,
-                            location: cleanStr(a.location),
-                            assigned_to: cleanStr(a.assigned_to) === 'Unassigned' ? null : cleanStr(a.assigned_to),
-                            assigned_by: assignedBy,
-                            cost: finalCost,
-                            specs: specs
-                        };
-                    });
-                    dataChanged = true;
-                }
-
-                // 2. SEMANTIC VALIDATION (Purge Bad Imports)
-                // Check if any status is NOT in the allowed list.
-                const validStatuses = ['active', 'in use', 'in stock', 'repair', 'maintenance', 'retired'];
-                const hasInvalidStatus = parsed.some(a => !a.status || !validStatuses.includes(a.status.toLowerCase()));
-
-                if (hasInvalidStatus) {
-                    const initialCount = parsed.length;
-                    parsed = parsed.filter(a => {
-                        if (!a.status) return false;
-                        const s = a.status.toLowerCase();
-                        return validStatuses.includes(s);
-                    });
-                    if (parsed.length < initialCount) {
-                        console.log(`Removed ${initialCount - parsed.length} corrupted assets.`);
-                        dataChanged = true;
-                    }
-                }
-
-                if (dataChanged) {
-                    localStorage.setItem('assets', JSON.stringify(parsed));
-                }
-
-                setAssets(parsed);
-                setFilteredAssets(parsed);
-            } else {
-                setAssets(initialMockAssets);
-                setFilteredAssets(initialMockAssets);
-                localStorage.setItem('assets', JSON.stringify(initialMockAssets));
+            if (parsed.length === 0) {
+                setAssets([]);
+                setFilteredAssets([]);
+                return;
             }
+
+            // 1. FORMATTING & PATCHING (Quotes, Costs, Specs)
+            // We apply this frontend-side patching to ensure UI consistency regardless of source
+            let dataChanged = false;
+
+            // Check if patching is needed (simplified check)
+            const needsFormatting = parsed.some(a =>
+                (typeof a.name === 'string' && (a.name.includes('"') || a.name.startsWith("'"))) ||
+                a.cost === 0 ||
+                a.assigned_by === 'Bulk Import' ||
+                (a.segment === 'IT' && !a.specs && (a.type === 'Laptop' || a.type === 'Desktop'))
+            );
+
+            if (needsFormatting) {
+                parsed = parsed.map(a => {
+                    const cleanStr = (s) => s ? String(s).replace(/^["']|["']$/g, '').trim() : s;
+                    const parseVal = (v) => {
+                        if (!v) return 0;
+                        if (typeof v === 'number') return v;
+                        const n = parseFloat(String(v).replace(/[₹$,\s]/g, ''));
+                        return isNaN(n) ? 0 : n;
+                    };
+
+                    // Clean status
+                    let st = cleanStr(a.status);
+                    if (st && (st.match(/active/i) || st.match(/in use/i))) st = 'In Use';
+                    // Maintain consistency with Context Enums if possible, but UI expects Title Case
+
+                    // COST PATCHING
+                    let finalCost = parseVal(a.cost || a.purchase_cost); // Handle API field name
+                    if (finalCost === 0) {
+                        const t = (a.type || '').toLowerCase();
+                        if (t.includes('laptop')) finalCost = Math.floor(Math.random() * (85000 - 45000) + 45000);
+                        else if (t.includes('desktop') || t.includes('mac')) finalCost = Math.floor(Math.random() * (70000 - 35000) + 35000);
+                        else if (t.includes('monitor')) finalCost = Math.floor(Math.random() * (25000 - 8000) + 8000);
+                        else finalCost = Math.floor(Math.random() * (15000 - 5000) + 5000);
+                    }
+
+                    // SPECS PATCHING
+                    let specs = a.specs || a.specifications || {}; // Handle API field
+                    const typeLower = (a.type || '').toLowerCase();
+                    if (Object.keys(specs).length === 0 && a.segment === 'IT') {
+                        // ... (keep existing specs generation)
+                        const processors = ['Intel Core i5', 'Intel Core i7', 'Intel Core i9', 'AMD Ryzen 5', 'AMD Ryzen 7', 'Apple M1', 'Apple M2'];
+                        const rams = ['8GB', '16GB', '32GB', '64GB'];
+                        const storages = ['256GB SSD', '512GB SSD', '1TB SSD', '2TB SSD'];
+                        const os = ['Windows 10 Pro', 'Windows 11 Pro', 'macOS Ventura', 'macOS Sonoma', 'Ubuntu Linux'];
+
+                        if (typeLower.includes('laptop') || typeLower.includes('desktop') || typeLower.includes('mac')) {
+                            specs = {
+                                processor: processors[Math.floor(Math.random() * processors.length)],
+                                ram: rams[Math.floor(Math.random() * rams.length)],
+                                storage: storages[Math.floor(Math.random() * storages.length)],
+                                os: os[Math.floor(Math.random() * os.length)]
+                            };
+                        } else if (typeLower.includes('monitor')) {
+                            specs = { resolution: '4K UHD', refresh_rate: '60Hz', panel: 'IPS' };
+                        }
+                    }
+
+                    return {
+                        ...a,
+                        name: cleanStr(a.name),
+                        segment: cleanStr(a.segment),
+                        type: cleanStr(a.type), // API might lack this? seed_data added it to specs.
+                        model: cleanStr(a.model) || (specs.model),
+                        serial_number: cleanStr(a.serial_number),
+                        status: st,
+                        location: cleanStr(a.location) || (a.location_id ? 'Office' : 'Unknown'), // API has IDs, need mapping? For now keep simple
+                        assigned_to: cleanStr(a.assigned_to), // API has ID?
+                        cost: finalCost,
+                        specs: specs
+                    };
+                });
+            }
+
+            // 2. SEMANTIC VALIDATION
+            const validStatuses = ['active', 'in use', 'in stock', 'repair', 'maintenance', 'retired', 'available'];
+            parsed = parsed.filter(a => {
+                if (!a.status) return false;
+                const s = a.status.toLowerCase();
+                return validStatuses.includes(s) || s === 'available'; // API uses 'available'
+            });
+
+            setAssets(parsed);
+            setFilteredAssets(parsed);
         }
-        fetchAssets()
-    }, [])
+
+        processAssets();
+    }, [contextAssets])
 
     const router = useRouter()
 
     useEffect(() => {
         if (!router.isReady) return
-        const { status, risk, segment } = router.query
+        const { status, risk, segment, type } = router.query
         if (status) setFilterStatus(status)
+        if (type) setFilterType(type)
         if (segment) {
             // Normalize Non-IT casing to match Select Option
             if (segment.toLowerCase() === 'non-it') setFilterSegment('NON-IT')
@@ -177,6 +163,15 @@ export default function AssetsPage() {
         if (filterSegment !== 'All') {
             result = result.filter(a => (a.segment || '').toLowerCase() === filterSegment.toLowerCase())
         }
+        if (filterType !== 'All') {
+            result = result.filter(a => (a.type || '').toLowerCase() === filterType.toLowerCase())
+        }
+
+        // Handle Location Query Param (Deep Linking)
+        const { location } = router.query || {}
+        if (location) {
+            result = result.filter(a => (a.location || '').toLowerCase() === location.toLowerCase())
+        }
 
         // Handle Warranty Risk Filter
         if (risk === 'warranty') {
@@ -201,7 +196,7 @@ export default function AssetsPage() {
         }
 
         setFilteredAssets(result)
-    }, [search, filterStatus, filterSegment, assets, router.query])
+    }, [search, filterStatus, filterSegment, filterType, assets, router.query])
 
     return (
         <div className="space-y-8">
@@ -242,6 +237,18 @@ export default function AssetsPage() {
                         <option value="All" className="bg-slate-900 text-white">All Segments</option>
                         <option value="IT" className="bg-slate-900 text-white">IT</option>
                         <option value="NON-IT" className="bg-slate-900 text-white">NON-IT</option>
+                    </select>
+
+                    <select
+                        className="input-field w-36 bg-slate-800/50"
+                        value={filterType}
+                        onChange={(e) => setFilterType(e.target.value)}
+                    >
+                        {uniqueTypes.map(t => (
+                            <option key={t} value={t} className="bg-slate-900 text-white">
+                                {t === 'All' ? 'All Types' : t}
+                            </option>
+                        ))}
                     </select>
 
                     <select

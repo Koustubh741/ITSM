@@ -1,6 +1,7 @@
 import '@/styles/globals.css'
 import Layout from '@/components/Layout'
 import { RoleProvider } from '@/contexts/RoleContext'
+import { AssetProvider } from '@/contexts/AssetContext'
 import AuthGuard from '@/components/AuthGuard'
 import { useRouter } from 'next/router'
 import { useEffect } from 'react'
@@ -37,17 +38,35 @@ export default function App({ Component, pageProps }) {
         };
     }, [router]);
 
+    // Theme Persistence
+    useEffect(() => {
+        const savedSettings = localStorage.getItem('appSettings');
+        if (savedSettings) {
+            try {
+                const { theme } = JSON.parse(savedSettings);
+                const root = document.body;
+                if (theme === 'light') root.classList.add('light-mode');
+                else if (theme === 'system' && !window.matchMedia('(prefers-color-scheme: dark)').matches) root.classList.add('light-mode');
+                else root.classList.remove('light-mode');
+            } catch (e) {
+                console.error("Theme load failed", e);
+            }
+        }
+    }, []);
+
     return (
         <RoleProvider>
-            <AuthGuard>
-                {isLoginPage ? (
-                    <Component {...pageProps} />
-                ) : (
-                    <Layout>
+            <AssetProvider>
+                <AuthGuard>
+                    {isLoginPage ? (
                         <Component {...pageProps} />
-                    </Layout>
-                )}
-            </AuthGuard>
+                    ) : (
+                        <Layout>
+                            <Component {...pageProps} />
+                        </Layout>
+                    )}
+                </AuthGuard>
+            </AssetProvider>
         </RoleProvider>
     )
 }
