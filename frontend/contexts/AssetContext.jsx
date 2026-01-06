@@ -69,94 +69,120 @@ export function AssetProvider({ children }) {
 
     const { isAuthenticated, isLoading: authLoading, user, currentRole } = useRole();
 
-    useEffect(() => {
-        const loadData = async () => {
-            if (authLoading || !isAuthenticated) return;
+    const loadData = async () => {
+        if (authLoading || !isAuthenticated) return;
 
+        try {
+            setLoading(true);
+            // 1) Load assets (critical for UI)
             try {
-                setLoading(true);
-                // 1) Load assets (critical for UI)
-                try {
-                    const apiAssets = await apiClient.getAssets();
-                    setAssets(apiAssets);
-                    setError(null);
-                } catch (assetErr) {
-                    console.error("CRITICAL: Failed to fetch assets from API:", assetErr);
-                    setError(assetErr.message);
-                    setAssets([]);
-                }
-
-                // 2) Load asset requests
-                try {
-                    let apiRequests = [];
-                    
-                    // Domain-based filtering logic
-                    if (currentRole?.slug === 'ADMIN' || 
-                        currentRole?.slug === 'ASSET_MANAGER' || 
-                        currentRole?.slug === 'FINANCE' || 
-                        currentRole?.slug === 'IT_MANAGEMENT'
-                    ) {
-                        // Admin-level/Centralized roles see EVERYTHING
-                        apiRequests = await apiClient.getAssetRequests();
-                    } else if (user?.position === 'MANAGER' && user?.domain) {
-                        // Managers see their DOMAIN'S requests + their OWN requests
-                        const domainRequests = await apiClient.getAssetRequests({ domain: user.domain });
-                        const myRequests = await apiClient.getAssetRequests({ requester_id: user.id });
-                        
-                        // Merge and deduplicate
-                        const combined = [...domainRequests, ...myRequests];
-                        const seen = new Set();
-                        apiRequests = combined.filter(r => {
-                            if (seen.has(r.id)) return false;
-                            seen.add(r.id);
-                            return true;
-                        });
-                    } else {
-                        // Regular Employees only see their OWN requests
-                        apiRequests = await apiClient.getAssetRequests({ requester_id: user?.id });
-                    }
-
-                    const mappedRequests = apiRequests.map(r => {
-                        const rawStatus = (r.status || '').toUpperCase();
-                        let status = rawStatus;
-                        if (rawStatus === 'PENDING' || rawStatus === 'SUBMITTED') status = 'REQUESTED';
-                        if (rawStatus === 'PROCUREMENT_REQUESTED') status = 'PROCUREMENT_REQUIRED';
-                        if (rawStatus === 'IN_USE') status = 'FULFILLED';
-                        if (rawStatus === 'MANAGER_REJECTED' || rawStatus === 'IT_REJECTED' || rawStatus === 'PROCUREMENT_REJECTED' || rawStatus === 'USER_REJECTED') status = 'REJECTED';
-
-                        return {
-                            ...r,
-                            status: status,
-                            assetType: r.asset_type || r.type || 'Standard',
-                            justification: r.justification || r.business_justification || '',
-                            requestedBy: { 
-                                name: r.requester_name || r.requester_id || 'Employee',
-                                email: r.requester_email || ''
-                            },
-                            procurementStage: r.procurement_finance_status === 'APPROVED' ? 'FINANCE_APPROVED' : (r.procurement_finance_status || 'AWAITING_DECISION'),
-                            currentOwnerRole: deriveOwnerRole(status, r.asset_type || r.type || 'Standard'),
-                            createdAt: r.created_at || r.requested_date
-                        };
-                    });
-                    setRequests(mappedRequests);
-                    if (typeof window !== 'undefined') localStorage.removeItem('enterprise_requests');
-                } catch (reqErr) {
-                    console.warn("Non‑critical: failed to load asset requests from API:", reqErr);
-                }
-            } catch (err) {
-                console.error("CRITICAL: Failed to fetch data from API:", err);
-                setError(err.message);
-                if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
-                    apiClient.clearToken();
-                    if (typeof window !== 'undefined') window.location.href = '/login';
-                }
-            } finally {
-                setLoading(false);
+                const apiAssets = await apiClient.getAssets();
+                setAssets(apiAssets);
+                setError(null);
+            } catch (assetErr) {
+                console.error("CRITICAL: Failed to fetch assets from API:", assetErr);
+                setError(assetErr.message);
+                setAssets([]);
             }
-        };
 
+            // 2) Load asset requests & tickets
+            try {
+                let apiAssetRequests = [];
+                let apiTickets = [];
+                
+                // Domain-based filtering logic
+                if (currentRole?.slug === 'ADMIN' || 
+                    currentRole?.slug === 'ASSET_MANAGER' || 
+                    currentRole?.slug === 'FINANCE' || 
+                    currentRole?.slug === 'IT_MANAGEMENT'
+                ) {
+                    // Admin-level/Centralized roles see EVERYTHING
+                    apiAssetRequests = await apiClient.getAssetRequests();
+                    apiTickets = await apiClient.getTickets();
+                } else if (user?.position === 'MANAGER' && user?.domain) {
+                    // Managers see their DOMAIN'S requests + their OWN requests
+                    const domainRequests = await apiClient.getAssetRequests({ domain: user.domain });
+                    const myRequests = await apiClient.getAssetRequests({ requester_id: user.id });
+                    
+                    // Merge and deduplicate
+                    const combinedAssets = [...domainRequests, ...myRequests];
+                    const seenAssets = new Set();
+                    apiAssetRequests = combinedAssets.filter(r => {
+                        if (seenAssets.has(r.id)) return false;
+                        seenAssets.add(r.id);
+                        return true;
+                    });
+
+                    // For tickets, managers only see their own
+                    apiTickets = await apiClient.getTickets({ requestor_id: user.id });
+                } else {
+                    // Regular Employees only see their OWN requests
+                    apiAssetRequests = await apiClient.getAssetRequests({ requester_id: user?.id });
+                    apiTickets = await apiClient.getTickets({ requestor_id: user?.id });
+                }
+
+                const mappedAssetRequests = apiAssetRequests.map(r => {
+                    const rawStatus = (r.status || '').toUpperCase();
+                    let status = rawStatus;
+                    if (rawStatus === 'PENDING' || rawStatus === 'SUBMITTED') status = 'REQUESTED';
+                    if (rawStatus === 'PROCUREMENT_REQUESTED') status = 'PROCUREMENT_REQUIRED';
+                    if (rawStatus === 'IN_USE') status = 'FULFILLED';
+                    if (rawStatus === 'MANAGER_REJECTED' || rawStatus === 'IT_REJECTED' || rawStatus === 'PROCUREMENT_REJECTED' || rawStatus === 'USER_REJECTED') status = 'REJECTED';
+
+                    return {
+                        ...r,
+                        status: status,
+                        assetType: r.asset_type || r.type || 'Standard',
+                        justification: r.justification || r.business_justification || '',
+                        requestedBy: { 
+                            name: r.requester_name || r.requester_id || 'Employee',
+                            email: r.requester_email || ''
+                        },
+                        procurementStage: r.procurement_finance_status === 'APPROVED' ? 'FINANCE_APPROVED' : (r.procurement_finance_status || 'AWAITING_DECISION'),
+                        currentOwnerRole: deriveOwnerRole(status, r.asset_type || r.type || 'Standard'),
+                        createdAt: r.created_at || r.requested_date
+                    };
+                });
+
+                const mappedTickets = apiTickets.map(t => {
+                    const rawStatus = (t.status || '').toUpperCase();
+                    let status = rawStatus;
+                    if (rawStatus === 'OPEN') status = 'REQUESTED';
+
+                    return {
+                        ...t,
+                        status: status,
+                        assetType: 'Ticket',
+                        justification: t.description,
+                        requestedBy: {
+                            name: t.requestor_name || t.requestor_id || 'Employee',
+                            email: ''
+                        },
+                        currentOwnerRole: OWNER_ROLE.IT_MANAGEMENT,
+                        createdAt: t.created_at
+                    };
+                });
+
+                setRequests([...mappedAssetRequests, ...mappedTickets]);
+                if (typeof window !== 'undefined') localStorage.removeItem('enterprise_requests');
+            } catch (reqErr) {
+                console.warn("Non‑critical: failed to load asset requests or tickets from API:", reqErr);
+            }
+        } catch (err) {
+            console.error("CRITICAL: Failed to fetch data from API:", err);
+            setError(err.message);
+            if (err.message && (err.message.includes('401') || err.message.toLowerCase().includes('unauthorized'))) {
+                apiClient.clearToken();
+                if (typeof window !== 'undefined') window.location.href = '/login';
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         loadData();
-    }, [authLoading, isAuthenticated]);
+    }, [authLoading, isAuthenticated, currentRole, user]);
 
     // ... (keep persisting access token/user if needed, but not assets/requests to avoid conflict) ...
 
@@ -823,6 +849,7 @@ export function AssetProvider({ children }) {
             updateAssetStatus,
             assignAsset,
             updateAsset,
+            refreshData: loadData,
             // Backward compatibility
             managerApproveRequest,
             managerRejectRequest,

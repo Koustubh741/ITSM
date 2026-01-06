@@ -318,13 +318,26 @@ class ApiClient {
         });
     }
 
-    async resolveTicket(id, reviewerId, notes) {
+    async resolveTicket(id, reviewerId, notes, checklist = [], percentage = 100.0) {
         return this.request(`/tickets/${id}/resolve`, {
             method: 'POST',
             body: JSON.stringify({
                 reviewer_id: reviewerId,
-                outcome: 'resolve',
-                notes: notes
+                notes: notes,
+                checklist: checklist,
+                percentage: percentage
+            }),
+        });
+    }
+
+    async updateTicketProgress(id, reviewerId, notes, checklist, percentage) {
+        return this.request(`/tickets/${id}/progress`, {
+            method: 'POST',
+            body: JSON.stringify({
+                reviewer_id: reviewerId,
+                notes: notes,
+                checklist: checklist,
+                percentage: percentage
             }),
         });
     }

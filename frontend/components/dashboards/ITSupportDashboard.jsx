@@ -165,11 +165,11 @@ export default function ITSupportDashboard() {
     // 4. TICKET RESOLUTION WORKFLOW
     const openResolveModal = (ticket) => {
         setSelectedItem(ticket);
-        setResolutionNotes('');
+        setResolutionNotes(ticket.resolution_notes || '');
         setResolutionType('Fixed');
-        // Reset Wizard
+        // Reset Wizard but keep existing checklist
         setConfigStep(1); 
-        setActiveChecklist([]);
+        setActiveChecklist(ticket.resolution_checklist || []);
         setActiveModal('RESOLVE_TICKET');
     };
 
@@ -178,11 +178,32 @@ export default function ITSupportDashboard() {
             alert("Please enter troubleshooting notes.");
             return;
         }
+        
+        // Calculate Percentage
+        const total = activeChecklist.length;
+        const checked = activeChecklist.filter(i => i.checked).length;
+        const percentage = total > 0 ? (checked / total) * 100 : 0;
+
         // Resolve logic
-        resolveTicket(selectedItem.id, resolutionNotes);
+        resolveTicket(selectedItem.id, resolutionNotes, activeChecklist, percentage);
 
         setActiveModal(null);
         setSelectedItem(null);
+    };
+
+    const submitProgress = () => {
+        if (!resolutionNotes && activeChecklist.length === 0) {
+            alert("Please add notes or checklist items to update progress.");
+            return;
+        }
+        
+        // Calculate Percentage
+        const total = activeChecklist.length;
+        const checked = activeChecklist.filter(i => i.checked).length;
+        const percentage = total > 0 ? (checked / total) * 100 : 0;
+
+        // Update Progress
+        updateProgress(selectedItem.id, resolutionNotes, activeChecklist, percentage);
     };
     
     // Ticket Actions
@@ -199,9 +220,9 @@ export default function ITSupportDashboard() {
         }
     };
     
-    const resolveTicket = async (ticketId, notes) => {
+    const resolveTicket = async (ticketId, notes, checklist, percentage) => {
         try {
-            await apiClient.resolveTicket(ticketId, user.id, notes);
+            await apiClient.resolveTicket(ticketId, user.id, notes, checklist, percentage);
             // Refresh tickets
             const fetchedTickets = await apiClient.getTickets();
             setTickets(fetchedTickets);
@@ -210,6 +231,28 @@ export default function ITSupportDashboard() {
             console.error("Failed to resolve ticket:", error);
             alert("Failed to resolve ticket: " + error.message);
         }
+    };
+
+    const updateProgress = async (ticketId, notes, checklist, percentage, silent = false) => {
+        try {
+            await apiClient.updateTicketProgress(ticketId, user.id, notes, checklist, percentage);
+             // Refresh tickets
+             const fetchedTickets = await apiClient.getTickets();
+             setTickets(fetchedTickets);
+             if (!silent) alert("Progress updated and user notified!");
+        } catch (error) {
+            console.error("Failed to update progress:", error);
+            if (!silent) alert("Failed to update progress: " + error.message);
+        }
+    }
+
+    const saveDraft = () => {
+        if (!selectedItem) return;
+        const total = activeChecklist.length;
+        const checked = activeChecklist.filter(i => i.checked).length;
+        // If we have notes but nothing checked, we are at least at 10%
+        const percentage = total > 0 ? (checked / total) * 100 : (resolutionNotes ? 10 : 0);
+        updateProgress(selectedItem.id, resolutionNotes, activeChecklist, percentage, true);
     };
 
 
@@ -849,48 +892,71 @@ export default function ITSupportDashboard() {
 
                             </div>
 
-                            <div className="p-6 border-t border-white/10 flex justify-end gap-3 bg-white/5 shrink-0">
-                                {configStep === 1 && (
-                                    <>
-                                        <button onClick={() => setActiveModal(null)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancel</button>
+                            <div className="p-6 border-t border-white/10 flex justify-between items-center bg-white/5 shrink-0">
+                                <div className="flex gap-2">
+                                    <button onClick={() => setActiveModal(null)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                    <button 
+                                        onClick={saveDraft}
+                                        className="px-4 py-2 text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-2 border border-indigo-500/20 rounded-lg hover:bg-indigo-500/5"
+                                    >
+                                        <ShieldCheck size={14} /> Save Draft
+                                    </button>
+                                </div>
+
+                                <div className="flex gap-3">
+                                    {configStep === 1 && (
                                         <button 
                                             onClick={() => {
                                                 if (!resolutionNotes) return alert("Please enter a diagnosis.");
+                                                // Save progress silently when moving to next step
+                                                const percentage = activeChecklist.length > 0 ? (activeChecklist.filter(i => i.checked).length / activeChecklist.length) * 100 : 10;
+                                                updateProgress(selectedItem.id, resolutionNotes, activeChecklist, percentage, true);
                                                 setConfigStep(2);
                                             }}
                                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-lg shadow-indigo-500/20"
                                         >
                                             Next: Checklist
                                         </button>
-                                    </>
-                                )}
-                                {configStep === 2 && (
-                                    <>
-                                        <button onClick={() => setConfigStep(1)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Back</button>
-                                        <button 
-                                            onClick={() => {
-                                                if (activeChecklist.some(i => !i.checked)) {
-                                                    if (!confirm("Checklist is incomplete. Do you want to proceed regardless?")) return;
-                                                }
-                                                setConfigStep(3);
-                                            }}
-                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-lg shadow-indigo-500/20"
-                                        >
-                                            Next: Verify
-                                        </button>
-                                    </>
-                                )}
-                                {configStep === 3 && (
-                                    <>
-                                        <button onClick={() => setConfigStep(2)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Back</button>
-                                        <button 
-                                            onClick={submitResolution}
-                                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold shadow-lg shadow-emerald-500/20 flex items-center gap-2"
-                                        >
-                                            Resolve & Notify User <ArrowRight size={16} />
-                                        </button>
-                                    </>
-                                )}
+                                    )}
+                                    {configStep === 2 && (
+                                        <>
+                                            <button onClick={() => setConfigStep(1)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Back</button>
+                                            <button 
+                                                onClick={() => {
+                                                    const total = activeChecklist.length;
+                                                    const checked = activeChecklist.filter(i => i.checked).length;
+                                                    const percentage = total > 0 ? Math.max(10, (checked / total) * 100) : 10;
+                                                    updateProgress(selectedItem.id, resolutionNotes, activeChecklist, percentage, true);
+                                                    
+                                                    if (activeChecklist.some(i => !i.checked)) {
+                                                        if (!confirm("Checklist is incomplete. Do you want to proceed to final verification?")) return;
+                                                    }
+                                                    setConfigStep(3);
+                                                }}
+                                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-lg shadow-indigo-500/20"
+                                            >
+                                                Next: Verify
+                                            </button>
+                                        </>
+                                    )}
+                                    {configStep === 3 && (
+                                        <>
+                                            <button onClick={() => setConfigStep(2)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Back</button>
+                                            <button 
+                                                onClick={submitProgress}
+                                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-lg shadow-indigo-500/20"
+                                            >
+                                                Update Progress & Notify
+                                            </button>
+                                            <button 
+                                                onClick={submitResolution}
+                                                className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                                            >
+                                                Resolve & Close <ArrowRight size={16} />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     )}

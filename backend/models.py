@@ -109,7 +109,7 @@ class Ticket(Base):
     Ticket model for Help Desk/Incidents
     """
     __tablename__ = "tickets"
-    __table_args__ = {"schema": "helpdesk"}
+    __table_args__ = {"schema": "support"}
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     # Using a readable ID like TCK-101 is common, but basic UUID is safer for MVP.
@@ -128,6 +128,12 @@ class Ticket(Base):
     assigned_to_id = Column(String, nullable=True)
     related_asset_id = Column(String, nullable=True)
     
+    # Resolution Details
+    resolution_notes = Column(Text, nullable=True)
+    resolution_checklist = Column(JSON, nullable=True)
+    resolution_percentage = Column(Float, default=0.0)
+    timeline = Column(JSON, nullable=True, default=list)
+
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 

@@ -2,11 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
-from schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse, ITDiagnosisRequest
+from schemas.ticket_schema import TicketCreate, TicketUpdate, TicketResponse, ITDiagnosisRequest, ResolutionUpdate
 from services import ticket_service
 from services import asset_request_service
 from schemas.user_schema import UserResponse
 from models import Asset, ByodDevice
+from datetime import datetime
 
 router = APIRouter(
     prefix="/tickets",
@@ -50,8 +51,8 @@ def create_ticket(ticket: TicketCreate, db: Session = Depends(get_db)):
     return ticket_service.create_ticket(db=db, ticket=ticket)
 
 @router.get("/", response_model=List[TicketResponse])
-def read_tickets(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    tickets = ticket_service.get_tickets(db, skip=skip, limit=limit)
+def read_tickets(requestor_id: str = None, skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    tickets = ticket_service.get_tickets(db, requestor_id=requestor_id, skip=skip, limit=limit)
     return tickets
 
 @router.get("/{ticket_id}", response_model=TicketResponse)
@@ -145,36 +146,110 @@ def it_diagnose_ticket(
 def acknowledge_ticket(ticket_id: str, payload: ITDiagnosisRequest, db: Session = Depends(get_db)):
     """
     IT Management acknowledges the ticket, moving it to IN_PROGRESS.
-    Notification stub: "Notify END_USER about ongoing investigation"
     """
-    verify_it_management(payload.reviewer_id, db)
+    reviewer = verify_it_management(payload.reviewer_id, db)
     
     db_ticket = ticket_service.get_ticket(db, ticket_id)
     if not db_ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
         
-    # Check status case-insensitively
     if db_ticket.status and db_ticket.status.upper() == "OPEN":
         db_ticket.status = "IN_PROGRESS"
-        # Notification stub: print to console for now
+        
+        # Add to timeline
+        new_event = {
+            "action": "ACKNOWLEDGED",
+            "byRole": "IT_MANAGEMENT",
+            "byUser": reviewer.full_name,
+            "timestamp": datetime.utcnow().isoformat(),
+            "comment": payload.notes or "Ticket acknowledged and moved to Investigation"
+        }
+        
+        # Standard append and re-assign for SQLAlchemy JSON tracking
+        current_timeline = list(db_ticket.timeline) if db_ticket.timeline else []
+        current_timeline.append(new_event)
+        db_ticket.timeline = current_timeline
+        
+        # Also update resolution notes if provided
+        if payload.notes:
+            db_ticket.resolution_notes = payload.notes
+
         print(f"[NOTIFICATION] User {db_ticket.requestor_id} notified: IT has acknowledged ticket {ticket_id}")
         
     db.commit()
     db.refresh(db_ticket)
     return db_ticket
 
-@router.post("/{ticket_id}/resolve", response_model=TicketResponse)
-def resolve_ticket(ticket_id: str, payload: ITDiagnosisRequest, db: Session = Depends(get_db)):
+@router.post("/{ticket_id}/progress", response_model=TicketResponse)
+def update_ticket_progress(ticket_id: str, payload: ResolutionUpdate, db: Session = Depends(get_db)):
     """
-    IT Management resolves the ticket explicitly.
+    Update resolution progress (checklist, notes, percentage) without closing the ticket.
+    Notify End User of progress.
     """
-    verify_it_management(payload.reviewer_id, db)
+    reviewer = verify_it_management(payload.reviewer_id, db)
     
     db_ticket = ticket_service.get_ticket(db, ticket_id)
     if not db_ticket:
         raise HTTPException(status_code=404, detail="Ticket not found")
         
+    # Update resolution details
+    db_ticket.resolution_notes = payload.notes
+    db_ticket.resolution_checklist = payload.checklist
+    db_ticket.resolution_percentage = payload.percentage
+    
+    # Ensure status is IN_PROGRESS (if not already) or keep as is
+    if db_ticket.status != "IN_PROGRESS" and db_ticket.status != "RESOLVED":
+        db_ticket.status = "IN_PROGRESS"
+
+    # Add to timeline
+    new_event = {
+        "action": "PROGRESS_UPDATE",
+        "byRole": "IT_MANAGEMENT",
+        "byUser": reviewer.full_name,
+        "timestamp": datetime.utcnow().isoformat(),
+        "comment": f"Resolution progress updated to {payload.percentage}%"
+    }
+    current_timeline = list(db_ticket.timeline) if db_ticket.timeline else []
+    current_timeline.append(new_event)
+    db_ticket.timeline = current_timeline
+
+    # Notification stub
+    print(f"[NOTIFICATION] User {db_ticket.requestor_id} notified: Ticket {ticket_id} progress updated to {payload.percentage}%")
+
+    db.commit()
+    db.refresh(db_ticket)
+    return db_ticket
+
+@router.post("/{ticket_id}/resolve", response_model=TicketResponse)
+def resolve_ticket(ticket_id: str, payload: ResolutionUpdate, db: Session = Depends(get_db)):
+    """
+    IT Management resolves the ticket explicitly with full resolution details.
+    """
+    reviewer = verify_it_management(payload.reviewer_id, db)
+    
+    db_ticket = ticket_service.get_ticket(db, ticket_id)
+    if not db_ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+        
+    # Update resolution details
+    db_ticket.resolution_notes = payload.notes
+    db_ticket.resolution_checklist = payload.checklist
+    db_ticket.resolution_percentage = 100.0 # Force 100% on resolve
+    
     db_ticket.status = "RESOLVED"
+
+    # Add to timeline
+    new_event = {
+        "action": "RESOLVED",
+        "byRole": "IT_MANAGEMENT",
+        "byUser": reviewer.full_name,
+        "timestamp": datetime.utcnow().isoformat(),
+        "comment": payload.notes or "Ticket has been marked as Resolved"
+    }
+    current_timeline = list(db_ticket.timeline) if db_ticket.timeline else []
+    current_timeline.append(new_event)
+    db_ticket.timeline = current_timeline
+    
     # Notification stub
     print(f"[NOTIFICATION] User {db_ticket.requestor_id} notified: Ticket {ticket_id} has been resolved")
     

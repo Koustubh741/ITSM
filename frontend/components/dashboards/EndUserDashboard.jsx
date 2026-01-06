@@ -7,7 +7,7 @@ import apiClient from '@/lib/apiClient';
 
 export default function EndUserDashboard() {
     const { currentRole, setCurrentRole, ROLES, logout, user } = useRole();
-    const { assets, requests, createRequest, managerApproveRequest, managerRejectRequest } = useAssetContext();
+    const { assets, requests, createRequest, managerApproveRequest, managerRejectRequest, refreshData } = useAssetContext();
     const [activeModal, setActiveModal] = useState(null); // 'asset' | 'ticket' | 'profile' | null
     const [showSuccess, setShowSuccess] = useState(null); // 'asset-success' | 'ticket-success' | null
     const [selectedRequest, setSelectedRequest] = useState(null); // For viewing details
@@ -265,7 +265,16 @@ export default function EndUserDashboard() {
                     {/* Support Tickets & Requests Unified List */}
                     <div className="glass-panel p-6">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-bold text-white">Requests & Tickets</h3>
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-lg font-bold text-white">Requests & Tickets</h3>
+                                <button 
+                                    onClick={() => refreshData?.()}
+                                    className="p-1.5 rounded-lg bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition-all border border-white/5 active:scale-90 group"
+                                    title="Refresh Data"
+                                >
+                                    <RefreshCw size={14} className="group-active:animate-spin" />
+                                </button>
+                            </div>
                             <div className="flex bg-slate-900/50 rounded-lg p-1 border border-white/5">
                                 <button
                                     onClick={() => setRequestFilter('active')}
@@ -308,14 +317,22 @@ export default function EndUserDashboard() {
                                     <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-white/5 to-transparent rounded-bl-3xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                     
                                     <div className="flex justify-between items-start mb-2 relative z-10">
-                                        <span className={`px-2 py-0.5 text-[10px] rounded font-medium border 
-                                            ${req.status === 'FULFILLED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
-                                                req.status === 'IT_APPROVED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                                    req.status === 'PROCUREMENT_REQUIRED' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                                                        req.status === 'REJECTED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                                                            'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
-                                            {req.status}
-                                        </span>
+                                        <div className="flex flex-col items-end">
+                                            <span className={`px-2 py-0.5 text-[10px] rounded font-medium border 
+                                                ${req.status === 'FULFILLED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                    req.status === 'IT_APPROVED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                                        req.status === 'IN_PROGRESS' ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' :
+                                                            req.status === 'PROCUREMENT_REQUIRED' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                                                req.status === 'REJECTED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                                    'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
+                                                {req.status}
+                                            </span>
+                                            {req.assetType === 'Ticket' && req.resolution_percentage > 0 && (
+                                                <span className="text-[9px] text-indigo-400 font-bold mt-1">
+                                                    {Math.round(req.resolution_percentage)}% Fixed
+                                                </span>
+                                            )}
+                                        </div>
                                         <span className="text-[10px] text-slate-500 font-mono">{new Date(req.createdAt).toLocaleDateString()}</span>
                                     </div>
                                     
@@ -714,9 +731,10 @@ export default function EndUserDashboard() {
                                         <span className={`px-2 py-0.5 text-xs rounded font-bold border 
                                         ${selectedRequest.status === 'FULFILLED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                                                 selectedRequest.status === 'IT_APPROVED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
-                                                    selectedRequest.status === 'PROCUREMENT_REQUIRED' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                                                        selectedRequest.status === 'REJECTED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
-                                                            'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
+                                                    selectedRequest.status === 'IN_PROGRESS' ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' :
+                                                        selectedRequest.status === 'PROCUREMENT_REQUIRED' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                                            selectedRequest.status === 'REJECTED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                                                'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
                                             {selectedRequest.status}
                                         </span>
                                         <span className="text-xs text-slate-400 font-mono">{selectedRequest.id}</span>
@@ -769,6 +787,47 @@ export default function EndUserDashboard() {
                                             <p className="text-rose-200 text-sm mt-1">{selectedRequest.rejectionReason}</p>
                                         </div>
                                     )}
+
+                                    {/* Resolution Progress for Tickets */}
+                                    {selectedRequest.assetType === 'Ticket' && (selectedRequest.resolution_percentage > 0 || selectedRequest.resolution_checklist?.length > 0) && (
+                                        <div className="bg-indigo-500/10 border border-indigo-500/20 p-4 rounded-xl space-y-4">
+                                            <div className="flex justify-between items-center">
+                                                <label className="text-xs font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                                                    <CheckCircle size={14} /> Resolution Progress
+                                                </label>
+                                                <span className="text-sm font-bold text-white">{Math.round(selectedRequest.resolution_percentage)}%</span>
+                                            </div>
+                                            
+                                            {/* Progress Bar */}
+                                            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                                                <div 
+                                                    className="h-full bg-indigo-500 transition-all duration-1000"
+                                                    style={{ width: `${selectedRequest.resolution_percentage}%` }}
+                                                ></div>
+                                            </div>
+
+                                            {selectedRequest.resolution_checklist?.length > 0 && (
+                                                <div className="space-y-2 pt-2 border-t border-indigo-500/20">
+                                                    <p className="text-[10px] text-slate-500 uppercase font-bold">Verification Steps</p>
+                                                    {selectedRequest.resolution_checklist.map((item, idx) => (
+                                                        <div key={idx} className="flex items-center gap-2 text-xs">
+                                                            <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border ${item.checked ? 'bg-indigo-500 border-indigo-400 text-white' : 'border-slate-600 text-transparent'}`}>
+                                                                <CheckCircle size={10} />
+                                                            </div>
+                                                            <span className={item.checked ? 'text-slate-200' : 'text-slate-500'}>{item.text}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {selectedRequest.resolution_notes && (
+                                                <div className="bg-slate-900/50 p-2.5 rounded border border-white/5">
+                                                    <p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Latest Fix Notes</p>
+                                                    <p className="text-xs text-slate-300 italic">"{selectedRequest.resolution_notes}"</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Audit Trail */}
@@ -778,38 +837,38 @@ export default function EndUserDashboard() {
                                         Activity Log
                                     </h4>
                                     <div className="space-y-4 relative before:absolute before:left-2 before:top-2 before:bottom-0 before:w-0.5 before:bg-white/10">
-                                        {selectedRequest.auditTrail?.length > 0 ? selectedRequest.auditTrail.map((log, idx) => (
+                                        {(selectedRequest.auditTrail || selectedRequest.timeline || []).length > 0 ? (selectedRequest.auditTrail || selectedRequest.timeline).map((log, idx) => (
                                             <div key={idx} className="relative pl-8">
                                                 <div className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 border-slate-900 
-                                                ${log.action.includes('CREATED') ? 'bg-blue-500' :
-                                                        log.action.includes('APPROVED') ? 'bg-emerald-500' :
-                                                            log.action.includes('REJECTED') ? 'bg-rose-500' :
-                                                                'bg-slate-500'}`}></div>
+                                                ${(log.action || '').includes('CREATED') ? 'bg-blue-500' :
+                                                    (log.action || '').includes('ACK') ? 'bg-sky-500' :
+                                                        (log.action || '').includes('PROGRESS') ? 'bg-indigo-500' :
+                                                            (log.action || '').includes('APPROVE') || (log.action || '').includes('RESOLVE') ? 'bg-emerald-500' :
+                                                                (log.action || '').includes('REJECT') ? 'bg-rose-500' :
+                                                                    'bg-slate-500'}`}></div>
                                                 <div className="flex flex-col">
-                                                    <span className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleString()}</span>
-                                                    <span className="text-sm font-bold text-slate-200">{log.action}</span>
-                                                    <span className="text-xs text-slate-400">by {log.byRole} ({log.byUser})</span>
-                                                    {log.comment && <p className="text-xs text-slate-500 mt-0.5 italic">"{log.comment}"</p>}
+                                                    <span className="text-xs text-slate-500">{new Date(log.timestamp || log.date).toLocaleString()}</span>
+                                                    <div className="flex justify-between items-start">
+                                                        <span className="text-sm font-bold text-slate-200">{log.action || log.status || 'Update'}</span>
+                                                        {log.percentage !== undefined && (
+                                                            <span className="text-[10px] bg-indigo-500/10 text-indigo-400 px-1.5 py-0.5 rounded border border-indigo-500/20">
+                                                                {log.percentage}%
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-xs text-slate-400">
+                                                        by {log.byRole || log.role || 'System'} ({log.byUser || log.user || 'Automation'})
+                                                    </span>
+                                                    {(log.comment || log.notes) && <p className="text-xs text-slate-300 mt-1 italic border-l-2 border-white/5 pl-2">
+                                                        "{log.comment || log.notes}"
+                                                    </p>}
                                                 </div>
                                             </div>
                                         )) : (
-                                            // Fallback for old data without auditTrail
-                                            selectedRequest.timeline?.map((log, idx) => (
-                                                <div key={idx} className="relative pl-8">
-                                                    <div className={`absolute left-0 top-1 w-4 h-4 rounded-full border-2 border-slate-900 
-                                                ${log.action === 'CREATED' ? 'bg-blue-500' :
-                                                            log.action === 'APPROVED' ? 'bg-emerald-500' :
-                                                                log.action === 'REJECTED' ? 'bg-rose-500' :
-                                                                    'bg-slate-500'}`}></div>
-                                                    <div className="flex flex-col">
-                                                        <span className="text-xs text-slate-500">{new Date(log.timestamp).toLocaleString()}</span>
-                                                        <span className="text-sm font-bold text-slate-200">{log.action}</span>
-                                                        <span className="text-xs text-slate-400">by {log.role || log.byRole}</span>
-                                                        {log.comment && <p className="text-xs text-slate-500 mt-0.5 italic">"{log.comment}"</p>}
-                                                    </div>
-                                                </div>
-                                            )))
-                                        }
+                                            <div className="relative pl-8 py-4">
+                                                <p className="text-xs text-slate-500 italic">No activity recorded for this request.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
