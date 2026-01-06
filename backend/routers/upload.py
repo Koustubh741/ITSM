@@ -2,7 +2,9 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 import pandas as pd
 import io
 from services import asset_service
+from services import asset_request_service
 from schemas.asset_schema import AssetCreate
+from schemas.asset_request_schema import AssetRequestCreate
 from datetime import datetime
 
 router = APIRouter(
@@ -29,7 +31,7 @@ async def smart_upload(file: UploadFile = File(...)):
     df.columns = df.columns.str.lower().str.replace(' ', '_')
     
     results = {
-        "assets_created": 0,
+        "asset_requests_created": 0,
         "procurement_requests_created": 0,
         "errors": []
     }
@@ -46,48 +48,46 @@ async def smart_upload(file: UploadFile = File(...)):
             elif pd.isna(row.get('serial_number')) and (not pd.isna(row.get('estimated_cost')) or not pd.isna(row.get('reason'))):
                 is_procurement = True
             
-            asset_data = {
-                "name": row.get('name') or row.get('asset_name') or "Unknown Asset",
-                "segment": row.get('segment', 'IT'),
-                "type": row.get('type', 'Laptop'),
-                "model": row.get('model', ''),
-                "vendor": row.get('vendor', ''),
-                "serial_number": row.get('serial_number', f"TEMP-{datetime.now().timestamp()}-{index}") if is_procurement else row.get('serial_number', ''),
-                "status": "In Stock",
-                "location": row.get('location', 'Headquarters')
-            }
-
-            if is_procurement:
-                asset_data['procurement_status'] = 'Requested'
-                asset_data['status'] = 'Pending' # Placeholder status until received
-                # Additional procurement fields if available
-                if 'requester' in row:
-                    asset_data['assigned_to'] = row['requester']
-                
-                # We reuse the AssetCreate schema, assuming it handles extra fields gracefully or we just pass base ones
-                # Ideally we map row data to schema fields
-                
-                created_asset = asset_service.create_asset(AssetCreate(**asset_data))
-                if created_asset:
-                    # Update specific procurement fields not in Create schema if necessary, 
-                    # but our AssetCreate schema inherits AssetBase which HAS procurement_status.
-                    # So passing it in constructor above is correct.
-                    results["procurement_requests_created"] += 1
+            # Get requester_id - required for asset requests
+            requester_id = row.get('requester_id') or row.get('requester')
+            if not requester_id:
+                results['errors'].append(f"Row {index+1}: Missing requester_id/requester")
+                continue
             
+            # Prepare asset request data
+            request_data = {
+                "requester_id": str(requester_id),
+                "asset_name": row.get('name') or row.get('asset_name') or "Unknown Asset",
+                "asset_type": row.get('type', 'Laptop'),
+                "asset_ownership_type": row.get('asset_ownership_type', 'COMPANY_OWNED'),  # Default to COMPANY_OWNED
+                "asset_model": row.get('model', ''),
+                "asset_vendor": row.get('vendor', ''),
+                "cost_estimate": float(row.get('cost_estimate', 0)) if not pd.isna(row.get('cost_estimate')) else None,
+                "justification": row.get('justification', ''),
+                "business_justification": row.get('business_justification') or row.get('reason') or row.get('justification') or "Uploaded via bulk import"
+            }
+            
+            # Validate required fields
+            if not request_data['business_justification']:
+                results['errors'].append(f"Row {index+1}: Missing business_justification")
+                continue
+            
+            if is_procurement:
+                # Create procurement request with PROCUREMENT_REQUESTED status
+                created_request = asset_request_service.create_asset_request(
+                    AssetRequestCreate(**request_data),
+                    initial_status="PROCUREMENT_REQUESTED"
+                )
+                if created_request:
+                    results["procurement_requests_created"] += 1
             else:
-                # Regular Asset
-                # Ensure date parsing
-                if 'purchase_date' in row and not pd.isna(row['purchase_date']):
-                    # valid date parsing required here
-                    pass 
-                
-                # Check for mandatory fields
-                if not asset_data['serial_number']:
-                    results['errors'].append(f"Row {index+1}: Missing Serial Number for Asset")
-                    continue
-
-                asset_service.create_asset(AssetCreate(**asset_data))
-                results["assets_created"] += 1
+                # Create regular asset request with SUBMITTED status
+                created_request = asset_request_service.create_asset_request(
+                    AssetRequestCreate(**request_data),
+                    initial_status="SUBMITTED"
+                )
+                if created_request:
+                    results["asset_requests_created"] += 1
 
         except Exception as e:
             results["errors"].append(f"Row {index+1}: {str(e)}")

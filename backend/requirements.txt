@@ -1,14 +1,9 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pydantic
-pydantic-settings
 python-multipart
-fastapi-cors
+sqlalchemy
 pandas
 openpyxl
-psycopg2-binary
-sqlalchemy
-python-jose[cryptography]
-passlib[bcrypt]
 python-dotenv
-alembic
+psycopg2-binary

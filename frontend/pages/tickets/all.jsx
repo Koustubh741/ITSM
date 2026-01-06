@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowLeft, Filter, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import apiClient from '@/lib/apiClient';
 
 export default function AllTicketsPage() {
     const router = useRouter();
@@ -15,43 +16,29 @@ export default function AllTicketsPage() {
     }, [router.isReady, router.query]);
 
     useEffect(() => {
-        // Mock fetch
-        // Load Data from LocalStorage
-        const savedAssets = localStorage.getItem('assets');
-        let assetList = [];
-        if (savedAssets) assetList = JSON.parse(savedAssets);
-        else {
-            const { initialMockAssets } = require('@/data/mockAssets');
-            assetList = initialMockAssets;
-        }
+        const loadTickets = async () => {
+            try {
+                const apiTickets = await apiClient.getTickets();
+                
+                // Map API tickets to frontend format
+                const mappedTickets = apiTickets.map(t => ({
+                    id: t.id,
+                    subject: t.subject,
+                    priority: t.priority || 'Medium',
+                    status: t.status || 'Open',
+                    user: t.requestor_id || 'System',
+                    created: t.created_at ? new Date(t.created_at).toLocaleDateString() : 'N/A',
+                    description: t.description
+                }));
 
-        // Generate Tickets from "Repair" or "Maintenance" assets
-        const realTickets = assetList
-            .filter(a => a.status === 'Repair' || a.status === 'Maintenance')
-            .map((a, i) => ({
-                id: `TCK-${202300 + i}`,
-                subject: `${a.status} Request: ${a.name}`,
-                priority: a.status === 'Repair' ? 'High' : 'Medium',
-                status: 'Open',
-                user: a.assigned_to || 'System',
-                created: '2023-12-20'
-            }));
+                setTickets(mappedTickets);
+            } catch (error) {
+                console.error('Failed to load tickets:', error);
+                setTickets([]);
+            }
+        };
 
-        // Fill remaining with mock tickets linked to random assets
-        const randomTickets = Array.from({ length: 15 }).map((_, i) => {
-            const randomAsset = assetList[Math.floor(Math.random() * assetList.length)];
-            const statuses = ['Open', 'Pending', 'Closed'];
-            return {
-                id: `TCK-GEN-${100 + i}`,
-                subject: `Issue with ${randomAsset?.name || 'Hardware'}`,
-                priority: ['Low', 'Medium', 'High'][i % 3],
-                status: statuses[i % 3], // Rotates: Open, Pending, Closed
-                user: randomAsset?.assigned_to || 'User',
-                created: '2023-12-15'
-            };
-        });
-
-        setTickets([...realTickets, ...randomTickets]);
+        loadTickets();
     }, []);
 
     return (

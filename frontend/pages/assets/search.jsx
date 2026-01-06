@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { ArrowLeft, Save } from 'lucide-react';
 import AssetTable from '@/components/AssetTable';
 import SmartFiltersBar from '@/components/SmartFiltersBar';
-import SavedViewsDrawer from '@/components/SavedViewsDrawer' // Will create next
+import SavedViewsDrawer from '@/components/SavedViewsDrawer';
+import apiClient from '@/lib/apiClient';
 
 export default function SmartSearchPage() {
     // Generate Mock Data
@@ -15,42 +16,19 @@ export default function SmartSearchPage() {
     const [currentFilters, setCurrentFilters] = useState(null);
 
     useEffect(() => {
-        // Load assets from localStorage or fallback to initialMockAssets to match main inventory
-        const savedAssets = localStorage.getItem('assets');
-        const enrichData = (data) => {
-            return data.map(asset => {
-                // Enrich with Department if missing
-                let dept = asset.department;
-                if (!dept) {
-                    if (asset.segment === 'IT') dept = 'IT';
-                    else if (asset.location?.includes('Reception')) dept = 'Admin';
-                    else dept = ['Engineering', 'Sales', 'HR', 'Finance'][Math.floor(Math.random() * 4)];
-                }
-
-                // Enrich with Warranty if missing
-                let warranty = asset.warranty_expiry;
-                if (!warranty) {
-                    // Random date between 1 month ago and 2 years in future
-                    const date = new Date();
-                    date.setDate(date.getDate() + Math.floor(Math.random() * 730) - 30);
-                    warranty = date.toISOString().split('T')[0];
-                }
-
-                return { ...asset, department: dept, warranty_expiry: warranty };
-            });
+        const loadAssets = async () => {
+            try {
+                const apiAssets = await apiClient.getAssets();
+                setAssets(apiAssets);
+                setFilteredAssets(apiAssets);
+            } catch (error) {
+                console.error('Failed to load assets:', error);
+                setAssets([]);
+                setFilteredAssets([]);
+            }
         };
 
-        if (savedAssets) {
-            const parsed = JSON.parse(savedAssets);
-            const enriched = enrichData(parsed);
-            setAssets(enriched);
-            setFilteredAssets(enriched);
-        } else {
-            const { initialMockAssets } = require('@/data/mockAssets');
-            const enriched = enrichData(initialMockAssets);
-            setAssets(enriched);
-            setFilteredAssets(enriched);
-        }
+        loadAssets();
     }, []);
 
     const router = useRouter();

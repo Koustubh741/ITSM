@@ -8,7 +8,7 @@ import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 import { ArrowLeft, User, MapPin, Calendar, Activity, Server, Shield, QrCode, ScanBarcode, AlertCircle, Download } from 'lucide-react'
 
-import { initialMockAssets } from '@/data/mockAssets';
+import apiClient from '@/lib/apiClient';
 
 export default function AssetDetail() {
     const router = useRouter()
@@ -25,39 +25,22 @@ export default function AssetDetail() {
         if (!id) return
         const fetchAsset = async () => {
             try {
-                // Try API first (mock call) - removed for frontend-only requirement
-                // const [assetRes, eventsRes] = await Promise.all([ ... ])
-                throw new Error("Use local data")
+                const [assetData, eventsData] = await Promise.all([
+                    apiClient.getAsset(id),
+                    apiClient.getAssetEvents(id)
+                ]);
+                
+                setAsset(assetData);
+                setEvents(eventsData || []);
+                setLoading(false);
             } catch (error) {
-                // Load from localStorage + Initial
-                const savedAssets = JSON.parse(localStorage.getItem('assets') || '[]');
-
-                // Merge initial if local is empty or incomplete (simple check)
-                let allAssets = savedAssets.length > 0 ? savedAssets : initialMockAssets;
-
-                // Lookup by ID
-                const foundAsset = allAssets.find(a => a.id == id); // Loose equality for string/number match
-
-                if (foundAsset) {
-                    setAsset(foundAsset);
-
-                    // Mock events based on found asset
-                    const mockEvents = [
-                        { event: "Asset Deployed", description: "Asset assigned and deployed to end user", date: "2024-12-10", user: "System Admin", status: "completed" },
-                        { event: "Warranty Registered", description: "3-year warranty registered with vendor", date: foundAsset.purchase_date || "2023-05-16", user: "Procurement Team", status: "completed" },
-                        { event: "Initial Setup", description: "Device configured with security policies", date: foundAsset.purchase_date || "2023-05-15", user: "IT Support", status: "completed" },
-                        { event: "Procurement Approved", description: "Purchase order approved", date: foundAsset.purchase_date || "2023-04-20", user: "Finance Manager", status: "completed" },
-                    ]
-                    setEvents(mockEvents)
-                } else {
-                    setAsset(null); // Asset not found
-                }
-            } finally {
-                setLoading(false)
+                console.error('Failed to load asset:', error);
+                setLoading(false);
             }
-        }
-        fetchAsset()
-    }, [id])
+        };
+
+        fetchAsset();
+    }, [id]);
 
     if (loading) return <div className="p-8">Loading...</div>
     if (!asset) return <div className="p-8">Asset not found</div>

@@ -1,126 +1,120 @@
 """
-Main FastAPI Application for Asset Management System
+FastAPI application entry point
 """
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
-from contextlib import asynccontextmanager
+import traceback
+from routers import upload, workflows
 
-from config import settings
-from database import get_db, test_connection, engine, Base
-from routers import assets, users, requests, dashboard, auth, departments, locations
-
-# Import all models to ensure they're registered with Base
-import models
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan events - startup and shutdown"""
-    # Startup
-    print("🚀 Starting Asset Management API...")
-    
-    # Test database connection
-    success, message = test_connection()
-    if success:
-        print(f"✅ {message}")
-    else:
-        print(f"❌ {message}")
-        raise Exception("Database connection failed!")
-    
-    # Create tables if they don't exist (for development)
-    # In production, use Alembic migrations
-    if settings.DEBUG:
-        print("📊 Checking database tables...")
-        # Base.metadata.create_all(bind=engine)  # Uncomment to auto-create tables
-    
-    yield
-    
-    # Shutdown
-    print("👋 Shutting down Asset Management API...")
-
-
-# Create FastAPI app
+# Create FastAPI app instance
 app = FastAPI(
-    title="Asset Management API",
-    description="API for IT Asset Management & Service Management System",
-    version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    lifespan=lifespan
+    title="ITSM Asset Management API",
+    description="Asset Management API for ITSM Platform",
+    version="1.0.0"
 )
 
-# CORS Middleware
+# Debug Exception Handler
+@app.exception_handler(Exception)
+async def debug_exception_handler(request: Request, exc: Exception):
+    print(f"DEBUG EXCEPTION: {exc}")
+    traceback.print_exc()
+    with open("exception.log", "w") as f:
+        f.write(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "traceback": traceback.format_exc()},
+        headers={
+            "Access-Control-Allow-Origin": "http://localhost:3000",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*"
+        }
+    )
+
+# Configure CORS
+# Allow all origins in development - restrict in production
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        settings.FRONTEND_URL,
         "http://localhost:3000",
+        "http://127.0.0.1:3000",
         "http://localhost:3001",
-        "http://localhost:3002",
+        "http://127.0.0.1:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Register routers
+app.include_router(upload.router)
+app.include_router(workflows.router)
 
-# Health check endpoint
+# Root endpoint
 @app.get("/")
 async def root():
     return {
-        "message": "Asset Management API",
+        "message": "ITSM Asset Management API",
         "version": "1.0.0",
-        "status": "running",
-        "docs": "/api/docs"
+        "docs": "/docs",
+        "health": "/health"
     }
 
-
+# Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    db_success, db_message = test_connection()
+    return {"status": "healthy"}
+
+# Database health check endpoint
+@app.get("/health/db")
+async def db_health_check():
+    """
+    Check database connectivity
+    """
+    from database import test_connection, get_connection_info
+    from sqlalchemy import text
     
-    return {
-        "status": "healthy" if db_success else "unhealthy",
-        "database": db_message,
-        "version": "1.0.0"
-    }
+    try:
+        if test_connection():
+            from database import engine
+            conn = engine.connect()
+            result = conn.execute(text("SELECT current_database(), version()"))
+            db_name, version = result.fetchone()
+            conn.close()
+            
+            info = get_connection_info()
+            return {
+                "status": "connected",
+                "database": db_name,
+                "postgresql_version": version.split(",")[0],
+                "connection_info": {
+                    "host": info["host"],
+                    "port": info["port"],
+                    "database": info["database"]
+                }
+            }
+        else:
+            return {
+                "status": "disconnected",
+                "error": "Database connection test failed"
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
+# Register assets router
+from routers import assets
+app.include_router(assets.router)
 
-# Include routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(users.router, prefix="/api/users", tags=["Users"])
-app.include_router(departments.router, prefix="/api/departments", tags=["Departments"])
-app.include_router(locations.router, prefix="/api/locations", tags=["Locations"])
-app.include_router(assets.router, prefix="/api/assets", tags=["Assets"])
-app.include_router(requests.router, prefix="/api/requests", tags=["Requests"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+from routers import auth
+app.include_router(auth.router)
 
+from routers import tickets
+app.include_router(tickets.router)
 
-# Error handlers
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"detail": exc.detail}
-    )
+from routers import asset_requests
+app.include_router(asset_requests.router)
 
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request, exc):
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error", "error": str(exc)}
-    )
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "main:app",
-        host=settings.HOST,
-        port=settings.PORT,
-        reload=settings.DEBUG
-    )

@@ -1,19 +1,18 @@
-import logging
-logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+
 from database import SessionLocal
-from models import Request, RequestStatus
+from models import AssetRequest, User
 
 def list_requests():
     db = SessionLocal()
     try:
-        requests = db.query(Request).order_by(Request.id.desc()).all()
-        with open("requests_dump.txt", "w") as f:
-            f.write(f"Total Requests: {len(requests)}\n")
-            f.write("-" * 80 + "\n")
-            f.write(f"{'ID':<5} | {'Request Number':<15} | {'Status':<15} | {'Reason':<20} | {'Rejection Reason'}\n")
-            f.write("-" * 80 + "\n")
+        requests = db.query(AssetRequest).all()
+        with open("requests_dump.txt", "w", encoding="utf-8") as f:
+            f.write(f"{'ID':<38} | {'Status':<30} | {'Requester'}\n")
+            f.write("-" * 100 + "\n")
             for req in requests:
-                f.write(f"{req.id:<5} | {req.request_number:<15} | {req.status.value:<15} | {str(req.reason)[:20]:<20} | {req.rejection_reason}\n")
+                requester = db.query(User).filter(User.id == req.requester_id).first()
+                requester_name = requester.full_name if requester else "Unknown"
+                f.write(f"{str(req.id):<38} | {req.status:<30} | {requester_name}\n")
     finally:
         db.close()
 

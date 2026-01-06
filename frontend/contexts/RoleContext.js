@@ -3,11 +3,11 @@ import { createContext, useContext, useState, useEffect } from 'react';
 const RoleContext = createContext();
 
 export const ROLES = [
-    { label: 'System Admin', dept: 'IT Dept' },
-    { label: 'Asset & Inventory Manager', dept: 'Asset Mgmt' },
-    { label: 'Procurement & Finance', dept: 'Finance' },
-    { label: 'IT Management', dept: 'IT Dept' },
-    { label: 'End User', dept: 'Employee' },
+    { label: 'System Admin', slug: 'ADMIN', dept: 'IT Dept' },
+    { label: 'Asset & Inventory Manager', slug: 'ASSET_MANAGER', dept: 'Asset Mgmt' },
+    { label: 'Procurement & Finance', slug: 'FINANCE', dept: 'Finance' },
+    { label: 'IT Management', slug: 'IT_MANAGEMENT', dept: 'IT Dept' },
+    { label: 'End User', slug: 'END_USER', dept: 'Employee' },
 ];
 
 export function RoleProvider({ children }) {
@@ -17,26 +17,50 @@ export function RoleProvider({ children }) {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
 
-    // Initialize from localStorage on mount
+    console.log('RoleContext: Provider mounting');
+
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const session = localStorage.getItem('auth_session');
-            if (session) {
-                try {
-                    const parsed = JSON.parse(session);
-                    if (parsed.isAuthenticated) {
-                        setIsAuthenticated(true);
-                        // USER_REQUEST: Load position from saved session
-                        setUser({ name: parsed.userName, location: parsed.location, position: parsed.position || 'EMPLOYEE' });
-                        const savedRole = ROLES.find(r => r.label === parsed.role) || ROLES[0];
-                        setCurrentRole(savedRole);
+        const initAuth = () => {
+            if (typeof window !== 'undefined') {
+                const session = localStorage.getItem('auth_session');
+                console.log('RoleContext: Initializing from localStorage, session found:', !!session);
+                
+                if (session) {
+                    try {
+                        const parsed = JSON.parse(session);
+                        console.log('RoleContext: Parsed session:', parsed);
+                        
+                        if (parsed && parsed.isAuthenticated) {
+                            // First, ensure apiClient has the token if it was stored separately
+                            // (ApiClient singleton already does this in its constructor, but we want to be sure)
+                            
+                            setUser({ 
+                                id: parsed.id, 
+                                name: parsed.userName, 
+                                location: parsed.location, 
+                                position: parsed.position || 'EMPLOYEE',
+                                domain: parsed.domain,
+                                company: parsed.company, // NEW: Restore company
+                                createdAt: parsed.createdAt // NEW: Restore DOJ
+                            });
+                            
+                            const savedRole = ROLES.find(r => r.slug === parsed.role || r.label === parsed.role) || ROLES[0];
+                            setCurrentRole(savedRole);
+                            setIsAuthenticated(true);
+                            console.log('RoleContext: Auth restored successfully for', parsed.userName);
+                        } else {
+                            console.log('RoleContext: Session found but not authenticated');
+                        }
+                    } catch (e) {
+                        console.error("RoleContext: Failed to parse auth session", e);
                     }
-                } catch (e) {
-                    console.error("Failed to parse auth session", e);
                 }
             }
-        }
-        setIsLoading(false);
+            setIsLoading(false);
+            console.log('RoleContext: Initialization complete, isLoading=false');
+        };
+
+        initAuth();
     }, []);
 
     // Persist role changes to localStorage automatically to prevent reset on reload
@@ -44,10 +68,14 @@ export function RoleProvider({ children }) {
         if (!isLoading && isAuthenticated && user && currentRole) {
             const session = {
                 isAuthenticated: true,
+                id: user.id,
                 userName: user.name,
                 location: user.location,
                 position: user.position, // NEW: Persist position
-                role: currentRole.label
+                domain: user.domain,
+                company: user.company, // NEW: Persist company
+                createdAt: user.createdAt, // NEW: Persist DOJ
+                role: currentRole.slug // Persist slug for better matching on reload
             };
             localStorage.setItem('auth_session', JSON.stringify(session));
         }
@@ -56,15 +84,28 @@ export function RoleProvider({ children }) {
     const login = (userData) => {
         setIsAuthenticated(true);
         // USER_REQUEST: Store position from login form (MANAGER or EMPLOYEE)
-        setUser({ name: userData.userName, location: userData.location, position: userData.position || 'EMPLOYEE' });
-        const roleObj = ROLES.find(r => r.label === userData.role) || ROLES[0];
+        setUser({ 
+            id: userData.id, 
+            name: userData.userName, 
+            location: userData.location, 
+            position: userData.position || 'EMPLOYEE',
+            domain: userData.domain,
+            company: userData.company, // NEW: Set company
+            createdAt: userData.createdAt // NEW: Set DOJ
+        });
+        const roleObj = ROLES.find(r => r.slug === userData.role || r.label === userData.role) || ROLES[0];
         setCurrentRole(roleObj);
 
         localStorage.setItem('auth_session', JSON.stringify({
             isAuthenticated: true,
+            id: userData.id,
             userName: userData.userName,
-            role: userData.role,
-            location: userData.location
+            role: roleObj.slug,
+            location: userData.location,
+            position: userData.position,
+            domain: userData.domain,
+            company: userData.company, // NEW: Save company
+            createdAt: userData.createdAt // NEW: Save DOJ
         }));
     };
 

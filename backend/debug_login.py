@@ -1,28 +1,41 @@
-from fastapi.testclient import TestClient
-from main import app
-import sys
 
-client = TestClient(app)
+import requests
+import json
+import uuid
 
-def test_login():
-    print("Attempting login via TestClient...")
-    try:
-        response = client.post(
-            "/api/auth/login",
-            data={"username": "admin@itsm.com", "password": "admin123"},
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
-        )
-        print(f"Status Code: {response.status_code}")
-        if response.status_code != 200:
-            print(f"Response Body: {response.text}")
-        else:
-            print("Login Successful!")
-            print(response.json())
-            
-    except Exception as e:
-        print(f"Exception during test: {e}")
-        import traceback
-        traceback.print_exc()
+BASE_URL = "http://127.0.0.1:8000"
+
+def test_registration_and_login():
+    email = f"test_{uuid.uuid4().hex[:6]}@example.com"
+    password = "password123"
+    
+    print(f"1. Attempting to register user: {email}")
+    register_payload = {
+        "email": email,
+        "password": password,
+        "full_name": "Test User",
+        "role": "ADMIN",  # Directly making it ADMIN
+        "status": "ACTIVE" # Directly making it ACTIVE
+    }
+    
+    reg_resp = requests.post(f"{BASE_URL}/auth/register", json=register_payload)
+    print(f"Registration status: {reg_resp.status_code}")
+    print(f"Registration response: {reg_resp.text}")
+    
+    if reg_resp.status_code != 200:
+        print("Registration failed, stopping.")
+        return
+
+    print("\n2. Attempting to login with new user")
+    login_payload = {
+        "username": email,
+        "password": password
+    }
+    
+    # login uses form data
+    login_resp = requests.post(f"{BASE_URL}/auth/login", data=login_payload)
+    print(f"Login status: {login_resp.status_code}")
+    print(f"Login response: {login_resp.text}")
 
 if __name__ == "__main__":
-    test_login()
+    test_registration_and_login()

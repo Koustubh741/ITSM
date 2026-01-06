@@ -9,19 +9,19 @@ def setup_database():
             print("\n=== CREATING DATABASE SCHEMAS ===\n")
             
             # Create all the necessary schemas
-            schemas = ["auth", "asset", "audit", "procurement", "helpdesk"]
+            schemas = ["auth", "asset", "helpdesk", "system"]
             for schema in schemas:
                 try:
                     connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
                     connection.commit()
-                    print(f"✅ Schema '{schema}' created/verified")
+                    print(f"[OK] Schema '{schema}' created/verified")
                 except Exception as e:
-                    print(f"⚠️  Schema '{schema}': {e}")
+                    print(f"[WARNING] Schema '{schema}': {e}")
             
             print("\n=== CREATING TABLES ===\n")
             # Create all tables defined in models
             models.Base.metadata.create_all(bind=engine)
-            print("✅ All tables created successfully!")
+            print("[OK] All tables created successfully!")
             
             print("\n=== VERIFICATION ===\n")
             # Verify tables were created
@@ -29,18 +29,21 @@ def setup_database():
             inspector = inspect(engine)
             
             for schema in schemas:
-                tables = inspector.get_table_names(schema=schema)
-                if tables:
-                    print(f"Schema '{schema}':")
-                    for table in tables:
-                        print(f"  ✅ {table}")
-                else:
-                    print(f"Schema '{schema}': (no tables)")
+                try:
+                    tables = inspector.get_table_names(schema=schema)
+                    if tables:
+                        print(f"Schema '{schema}':")
+                        for table in tables:
+                            print(f"  [OK] {table}")
+                    else:
+                        print(f"Schema '{schema}': (no tables yet)")
+                except Exception as e:
+                    print(f"Error checking schema {schema}: {e}")
             
-            print("\n✅ Database setup complete!")
+            print("\n[OK] Database setup complete!")
             
     except Exception as e:
-        print(f"\n❌ ERROR during database setup: {e}")
+        print(f"\n[ERROR] Database setup failed: {e}")
         import traceback
         traceback.print_exc()
 

@@ -13,7 +13,7 @@ export default function AssetRelationships() {
         if (!id) return
         const fetchRelationships = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/assets/${id}/relationships`)
+                const res = await axios.get(`http://127.0.0.1:8000/assets/${id}/relationships`)
                 setRelationships(res.data)
             } catch (error) {
                 console.error("Failed to fetch relationships", error)

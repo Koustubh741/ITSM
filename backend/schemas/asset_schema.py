@@ -49,11 +49,22 @@ class AssetUpdate(BaseModel):
     renewal_status: Optional[str] = None
     renewal_cost: Optional[float] = None
 
+from uuid import UUID
+from typing import Union
+
 class AssetResponse(AssetBase):
-    id: str
+    id: Union[str, UUID]
     created_at: datetime
     updated_at: datetime
     assignment_date: Optional[date] = None
 
     class Config:
+        json_encoders = {
+            UUID: lambda v: str(v)
+        }
         from_attributes = True
+class AssetAssignmentRequest(BaseModel):
+    assigned_to: str
+    assigned_to_id: Optional[str] = None
+    location: Optional[str] = "Office"
+    assignment_date: Optional[date] = None

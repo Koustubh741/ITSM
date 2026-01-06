@@ -16,45 +16,56 @@ export default function AuthGuard({ children }) {
     const [authorized, setAuthorized] = useState(false);
 
     useEffect(() => {
-        if (isLoading) return; // Wait for hydration
+        if (isLoading) {
+            console.log("AuthGuard: [WAITING] Context is still loading...");
+            return;
+        }
 
         const checkAuth = () => {
             const currentPath = router.asPath.split('?')[0];
             const isLoginPage = currentPath === '/login';
 
+            console.log("AuthGuard: [CHECKING]", { 
+                isAuthenticated, 
+                role: currentRole?.label, 
+                path: currentPath,
+                isReady: router.isReady 
+            });
+
             if (!isAuthenticated) {
-                // Not authenticated
                 if (!isLoginPage) {
+                    console.warn("AuthGuard: [UNAUTHORIZED] No session found. Redirecting to login.");
                     router.push('/login');
                 } else {
+                    console.log("AuthGuard: [ALLOWED] At login page, unauthorized is fine.");
                     setAuthorized(true);
                 }
             } else {
-                // Authenticated
-                if (currentPath === '/') {
-                    // Redirect root to user's dashboard
-                    const targetPath = ROLE_DASHBOARD_MAP[currentRole.label] || '/dashboard/end-user';
-                    router.push(targetPath);
-                } else if (isLoginPage) {
-                    // Allow access to login page even if authenticated (User Request)
+                if (!currentRole) {
+                    console.warn("AuthGuard: [INCOMPLETE] Authenticated but no role. This shouldn't happen.");
                     setAuthorized(true);
+                    return;
+                }
+
+                if (currentPath === '/') {
+                    const targetPath = ROLE_DASHBOARD_MAP[currentRole.label] || '/dashboard/end-user';
+                    console.log("AuthGuard: [REDIRECTING] Sending authenticated user to dashboard:", targetPath);
+                    router.push(targetPath);
                 } else {
-                    // ALLOW current route. 
-                    // Do NOT redirect even if it doesn't match the "default" dashboard for the role.
-                    // This fixes the reload issue where it forces you back to default.
+                    console.log("AuthGuard: [AUTHORIZED] Access granted for", currentRole.label);
                     setAuthorized(true);
                 }
             }
         };
 
-        checkAuth();
+        if (router.isReady) {
+            checkAuth();
+        }
 
-    }, [isAuthenticated, currentRole, router.asPath, isLoading]);
+    }, [isAuthenticated, currentRole, router.asPath, isLoading, router.isReady]);
 
-    // Show loading state while hydrating or unauthorized/redirecting
     if (isLoading || (!authorized && router.pathname !== '/login')) {
-        // Render a blank dark background to prevent white flash, but no "Loading..." text to reduce "different page" feel
-        return <div className="min-h-screen bg-slate-950" />;
+        return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500 text-sm">Loading Identity...</div>;
     }
 
     return children;

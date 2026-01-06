@@ -178,7 +178,7 @@ export default function ProcurementManagerDashboard() {
                                     </td>
                                     <td className="py-3 text-right">
                                         <button
-                                            onClick={() => procurementConfirmDelivery(req.id, "Procurement Officer")}
+                                            onClick={async () => await procurementConfirmDelivery(req.id, "Procurement Officer")}
                                             className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-emerald-500/10 transition-all flex items-center gap-2 ml-auto"
                                         >
                                             <CheckCircle size={14} /> Confirm Delivery → Inventory

@@ -1,6 +1,0 @@
-Testing Login...
-Login SUCCESS. Token obtained.
-
-Testing Get Assets...
-Assets SUCCESS. Count: 23
-Sample: Dell Latitude 5520

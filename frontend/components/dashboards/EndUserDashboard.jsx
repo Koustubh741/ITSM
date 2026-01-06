@@ -1,8 +1,9 @@
 
 import { useState } from 'react';
-import { Laptop, Ticket, RefreshCw, User, Briefcase, MapPin, Calendar, Building2, Cpu, X, CheckCircle, AlertCircle, Settings, Sparkles, ChevronUp } from 'lucide-react';
+import { Laptop, Ticket, RefreshCw, User, Briefcase, MapPin, Calendar, Building2, Cpu, X, CheckCircle, AlertCircle, Settings, Sparkles, ChevronUp, Smartphone } from 'lucide-react';
 import { useRole } from '@/contexts/RoleContext';
 import { useAssetContext, ASSET_STATUS } from '@/contexts/AssetContext';
+import apiClient from '@/lib/apiClient';
 
 export default function EndUserDashboard() {
     const { currentRole, setCurrentRole, ROLES, logout, user } = useRole();
@@ -10,27 +11,55 @@ export default function EndUserDashboard() {
     const [activeModal, setActiveModal] = useState(null); // 'asset' | 'ticket' | 'profile' | null
     const [showSuccess, setShowSuccess] = useState(null); // 'asset-success' | 'ticket-success' | null
     const [selectedRequest, setSelectedRequest] = useState(null); // For viewing details
+    const [requestFilter, setRequestFilter] = useState('active'); // 'active' | 'history'
 
-    const handleSubmit = (e, type) => {
+    const handleSubmit = async (e, type) => {
         e.preventDefault();
         const formData = new FormData(e.target);
 
         const requesterInfo = {
-            userId: user?.name || 'Alex Johnson',
+            id: user?.id,
             name: user?.name || 'Alex Johnson',
             role: 'End User'
         };
 
-        if (type === 'asset') {
+        if (type === 'asset' || type === 'byod') {
             createRequest({
-                assetType: formData.get('type') || 'Laptop',
+                assetType: type === 'byod' ? 'BYOD' : (formData.get('type') || 'Laptop'),
                 justification: formData.get('reason') || 'No justification provided',
-                requestedBy: requesterInfo
+                requestedBy: requesterInfo,
+                assetOwnershipType: type === 'byod' ? 'BYOD' : 'COMPANY_OWNED',
+                // For BYOD registration, we can include extra details in justification or wait for the registration step
+                deviceDetails: type === 'byod' ? {
+                    model: formData.get('device_model'),
+                    os: formData.get('os_version'),
+                    serial: formData.get('serial_number')
+                } : null
             });
+        } else if (type === 'ticket') {
+            // Create support ticket
+            try {
+                const ticketData = {
+                    subject: formData.get('title') || 'Support Request',
+                    category: formData.get('category') || 'Other',
+                    description: formData.get('description') || 'No description provided',
+                    priority: formData.get('priority') || 'MEDIUM',
+                    requestor_id: user?.id,
+                    related_asset_id: null, // Can be linked to an asset if needed
+                    status: 'OPEN'
+                };
+                
+                await apiClient.createTicket(ticketData);
+                console.log('[End User] Ticket created successfully');
+            } catch (error) {
+                console.error('[End User] Failed to create ticket:', error);
+                alert(`Failed to create ticket: ${error.message}`);
+                return;
+            }
         }
 
         setActiveModal(null);
-        setShowSuccess(type === 'asset' ? 'asset-success' : 'ticket-success');
+        setShowSuccess(type === 'asset' || type === 'byod' ? 'asset-success' : 'ticket-success');
         setTimeout(() => setShowSuccess(null), 3000);
     };
 
@@ -38,17 +67,25 @@ export default function EndUserDashboard() {
         name: user?.name || "Alex Johnson",
         role: user?.position === 'MANAGER' ? 'Manager' : (currentRole?.label || "Senior Software Engineer"),
         empId: user?.employee_id || "EMP-2024-8821",
-        company: "Acme Corp Global",
-        doj: "15th Aug, 2022",
+        company: user?.company || "Acme Corp Global",
+        doj: user?.createdAt ? new Date(user.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : "Recently Joined",
         location: user?.location || "New York HQ, Floor 4",
-        email: user?.email || "alex.j@acmecorp.com"
+        email: user?.email || "alex.j@acmecorp.com",
+        domain: user?.domain || "General"
     };
 
     // Filter assets assigned to current user
-    const assignedAssets = assets.filter(a =>
-        (a.assigned_to === (user?.name || 'Alex Johnson')) &&
-        (a.status === ASSET_STATUS.IN_USE || a.status === 'Active')
-    );
+    const assignedAssets = assets.filter(a => {
+        const matches = (a.assigned_to?.toLowerCase() === (user?.name || 'Alex Johnson').toLowerCase()) &&
+                        (a.status === ASSET_STATUS.IN_USE || a.status === 'Active');
+        return matches;
+    });
+
+    console.log('--- DASHBOARD ASSET DEBUG ---');
+    console.log('CUrrent User Name:', user?.name);
+    console.log('Total Assets in context:', assets.length);
+    console.log('Assigned Assets found:', assignedAssets.length);
+    console.log('----------------------------');
 
     return (
         <div className="space-y-6 relative">
@@ -105,6 +142,10 @@ export default function EndUserDashboard() {
                                 <p className="text-slate-400 text-xs uppercase mb-1 flex items-center gap-1.5"><MapPin size={12} /> Work Location</p>
                                 <p className="text-white font-semibold text-sm">{displayProfile.location}</p>
                             </div>
+                            <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                                <p className="text-slate-400 text-xs uppercase mb-1 flex items-center gap-1.5"><Sparkles size={12} className="text-purple-400" /> Domain</p>
+                                <p className="text-white font-semibold text-sm uppercase">{displayProfile.domain.replace('/', ' / ')}</p>
+                            </div>
                         </div>
                     </div>
 
@@ -114,6 +155,12 @@ export default function EndUserDashboard() {
                             className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all active:scale-95"
                         >
                             <User size={18} /> My Profile
+                        </button>
+                        <button
+                            onClick={() => setActiveModal('byod')}
+                            className="bg-sky-600 hover:bg-sky-500 text-white px-5 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm font-semibold shadow-lg shadow-sky-500/20 transition-all active:scale-95"
+                        >
+                            <Smartphone size={18} /> Register BYOD
                         </button>
                         <button
                             onClick={() => setActiveModal('asset')}
@@ -147,11 +194,14 @@ export default function EndUserDashboard() {
                                             {asset.type === 'Laptop' ? <Laptop size={24} /> : <RefreshCw size={24} />}
                                         </div>
                                         <div>
-                                            <h4 className="text-lg font-bold text-white">{asset.name}</h4>
+                                            <h4 className="text-lg font-bold text-white">
+                                                {asset.name}
+                                                {asset.model && asset.model !== asset.name && <span className="text-slate-400 font-normal text-sm ml-2">({asset.model})</span>}
+                                            </h4>
                                             <p className="text-sm text-slate-400 flex items-center gap-2 mt-1">
                                                 <span className="bg-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono text-slate-300">{asset.id}</span>
                                                 <span className="w-1 h-1 rounded-full bg-slate-500"></span>
-                                                <span>Assigned: {asset.assignedDate}</span>
+                                                <span>Assigned: {asset.assignment_date || asset.assignedDate || 'Recent'}</span>
                                             </p>
                                         </div>
                                     </div>
@@ -166,11 +216,11 @@ export default function EndUserDashboard() {
                                     <div>
                                         <p className="text-xs text-slate-500 uppercase mb-2 font-semibold">Asset Specifications</p>
                                         <ul className="space-y-2">
-                                            {Object.entries(asset.specs).map(([key, value]) => (
+                                            {Object.entries(asset.specifications || asset.specs || {}).map(([key, value]) => (
                                                 <li key={key} className="flex items-start gap-2 text-sm text-slate-300">
                                                     <Cpu size={14} className="mt-1 text-slate-500 shrink-0" />
                                                     <span>
-                                                        <span className="capitalize text-slate-400">{key}:</span> {value}
+                                                        <span className="capitalize text-slate-400">{key}:</span> {String(value)}
                                                     </span>
                                                 </li>
                                             ))}
@@ -214,17 +264,50 @@ export default function EndUserDashboard() {
                 <div className="space-y-6">
                     {/* Support Tickets & Requests Unified List */}
                     <div className="glass-panel p-6">
-                        <h3 className="text-lg font-bold text-white mb-4">My Requests & Tickets</h3>
-                        <div className="space-y-4">
-                            {requests.length === 0 ? (
-                                <p className="text-slate-400 text-sm">No active requests.</p>
-                            ) : requests.map(req => (
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-white">Requests & Tickets</h3>
+                            <div className="flex bg-slate-900/50 rounded-lg p-1 border border-white/5">
+                                <button
+                                    onClick={() => setRequestFilter('active')}
+                                    className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${requestFilter === 'active' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                >
+                                    Active
+                                </button>
+                                <button
+                                    onClick={() => setRequestFilter('history')}
+                                    className={`px-3 py-1 text-[10px] font-bold rounded transition-all ${requestFilter === 'history' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                >
+                                    History
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 max-h-[500px] overflow-y-auto custom-scrollbar pr-2">
+                            {requests.filter(req => {
+                                const isCompleted = ['FULFILLED', 'REJECTED', 'CLOSED', 'CANCELLED'].includes(req.status);
+                                return requestFilter === 'active' ? !isCompleted : isCompleted;
+                            }).length === 0 ? (
+                                <div className="text-center py-8">
+                                    <div className="w-12 h-12 rounded-full bg-slate-800/50 flex items-center justify-center mx-auto mb-3 border border-white/5">
+                                        <Briefcase className="text-slate-600" size={20} />
+                                    </div>
+                                    <p className="text-slate-500 text-xs">No {requestFilter} requests found.</p>
+                                </div>
+                            ) : requests
+                                .filter(req => {
+                                    const isCompleted = ['FULFILLED', 'REJECTED', 'CLOSED', 'CANCELLED'].includes(req.status);
+                                    return requestFilter === 'active' ? !isCompleted : isCompleted;
+                                })
+                                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                                .map(req => (
                                 <div
                                     key={req.id}
                                     onClick={() => setSelectedRequest(req)}
-                                    className={`p-3 rounded-xl bg-white/5 border border-white/5 hover:border-indigo-500/30 hover:shadow-md hover:bg-white/[0.07] transition-all cursor-pointer ${req.status === 'FULFILLED' || req.status === 'REJECTED' ? 'opacity-70' : ''}`}
+                                    className={`p-3 rounded-xl bg-white/5 border border-white/5 hover:border-indigo-500/30 hover:shadow-md hover:bg-white/[0.07] transition-all cursor-pointer group relative overflow-hidden`}
                                 >
-                                    <div className="flex justify-between items-start mb-2">
+                                    <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-white/5 to-transparent rounded-bl-3xl opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                    
+                                    <div className="flex justify-between items-start mb-2 relative z-10">
                                         <span className={`px-2 py-0.5 text-[10px] rounded font-medium border 
                                             ${req.status === 'FULFILLED' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                                                 req.status === 'IT_APPROVED' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
@@ -233,38 +316,41 @@ export default function EndUserDashboard() {
                                                             'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
                                             {req.status}
                                         </span>
-                                        <span className="text-[10px] text-slate-500">{new Date(req.createdAt).toLocaleDateString()}</span>
+                                        <span className="text-[10px] text-slate-500 font-mono">{new Date(req.createdAt).toLocaleDateString()}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-[10px] px-1.5 py-0.5 bg-slate-700 rounded text-slate-300">{req.assetType}</span>
-                                        <h4 className="text-sm font-bold text-white truncate">{req.assetType} Request</h4>
-                                    </div>
-                                    <p className="text-xs text-slate-400 truncate mb-2">{req.justification}</p>
-
-                                    {/* Current Owner Badge */}
-                                    <div className="flex items-center gap-1 mb-1">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
-                                        <span className="text-[10px] text-indigo-300 font-medium">With: {req.currentOwnerRole}</span>
-                                    </div>
-
-                                    {/* Procurement Progress */}
-                                    {req.procurementStage && (
-                                        <div className="text-[10px] text-amber-300 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20 mt-1">
-                                            📦 {req.procurementStage.replace(/_/g, ' ')}
+                                    
+                                    <div className="flex items-center gap-2 mb-1.5 relative z-10">
+                                        <div className={`p-1.5 rounded-lg ${req.assetType === 'Ticket' ? 'bg-rose-500/10 text-rose-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                                            {req.assetType === 'Ticket' ? <Ticket size={14} /> : <Laptop size={14} />}
                                         </div>
-                                    )}
+                                        <div>
+                                            <h4 className="text-sm font-bold text-white leading-tight">{req.assetType} Request</h4>
+                                            <p className="text-[10px] text-slate-500 truncate max-w-[150px]">{req.id.split('-')[0]}</p>
+                                        </div>
+                                    </div>
 
-                                    {req.status === 'REJECTED' && req.rejectionReason && (
-                                        <p className="text-xs text-rose-400 mt-2 p-2 bg-rose-500/10 rounded border border-rose-500/10">
-                                            Reason: {req.rejectionReason}
+                                    {req.justification && (
+                                        <p className="text-[11px] text-slate-400 mb-2 line-clamp-2 bg-slate-900/30 p-2 rounded-lg border border-white/5">
+                                            {req.justification}
                                         </p>
                                     )}
+
+                                    {/* Action Footers */}
+                                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5 relative z-10">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></div>
+                                            <span className="text-[10px] text-indigo-300 font-medium">With: {req.currentOwnerRole}</span>
+                                        </div>
+                                        {/* Status Indicators */}
+                                        {req.procurementStage && req.status !== 'FULFILLED' && (
+                                            <span className="text-[10px] flex items-center gap-1 text-amber-400">
+                                               <Building2 size={10} /> Procurement
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
-                        <button className="w-full mt-4 py-2 text-xs font-semibold text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors border border-white/10">
-                            View All History
-                        </button>
                     </div>
 
                     {/* Quick Policies */}
@@ -302,11 +388,17 @@ export default function EndUserDashboard() {
                             {requests.filter(r => r.status === 'REQUESTED').map(req => (
                                 <div key={req.id} className="p-4 bg-slate-800 rounded-xl border border-white/10 flex justify-between items-center group hover:border-indigo-500/50 transition-all">
                                     <div>
-                                        <div className="flex items-center gap-2">
-                                            <h4 className="font-bold text-white">{req.assetType} Request</h4>
-                                            {req.assetType === 'BYOD' && <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1.5 rounded border border-sky-500/30">BYOD</span>}
+                                        <div className="flex items-center justify-between gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-bold text-white">{req.assetType} Request</h4>
+                                                {req.assetType === 'BYOD' && <span className="text-[10px] bg-sky-500/20 text-sky-300 px-1.5 rounded border border-sky-500/30">BYOD</span>}
+                                            </div>
+                                            <span className="text-[10px] text-slate-500">{new Date(req.createdAt).toLocaleString()}</span>
                                         </div>
-                                        <p className="text-xs text-slate-400 mt-1">For: <span className="text-slate-200">{req.requestedBy?.name || req.requester_name || 'Employee'}</span></p>
+                                        <div className="mt-2 space-y-0.5">
+                                            <p className="text-xs text-slate-400">Sent by: <span className="text-indigo-300 font-semibold">{req.requestedBy?.name || req.requester_name}</span></p>
+                                            {req.requestedBy?.email && <p className="text-[10px] text-slate-500 italic">{req.requestedBy.email}</p>}
+                                        </div>
                                         <p className="text-xs text-slate-500 mt-0.5 truncate max-w-[200px]">{req.justification || req.reason || 'No justification'}</p>
                                     </div>
                                     <div className="flex gap-2">
@@ -314,7 +406,7 @@ export default function EndUserDashboard() {
                                             onClick={() => {
                                                 const reason = prompt("Reason for rejection:");
                                                 if (reason) {
-                                                    managerRejectRequest(req.id, reason, user.name);
+                                                    managerRejectRequest(req.id, reason, user.id, user.name);
                                                 }
                                             }}
                                             className="p-2 text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors" title="Reject">
@@ -322,7 +414,7 @@ export default function EndUserDashboard() {
                                         </button>
                                         <button
                                             onClick={() => {
-                                                managerApproveRequest(req.id, user.name);
+                                                managerApproveRequest(req.id, user.id, user.name);
                                             }}
                                             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-indigo-500/20"
                                         >
@@ -346,7 +438,10 @@ export default function EndUserDashboard() {
                                         <div className={`w-2 h-2 rounded-full ${req.status === 'REJECTED' ? 'bg-rose-500' : 'bg-emerald-500'}`}></div>
                                         <div>
                                             <p className="text-sm font-medium text-white">{req.assetType} Request</p>
-                                            <p className="text-xs text-slate-500">For: {req.requestedBy?.name || req.requester_name}</p>
+                                            <div className="flex flex-col mt-0.5">
+                                                <p className="text-xs text-slate-400">Sent by: <span className="text-slate-200">{req.requestedBy?.name || req.requester_name}</span></p>
+                                                <span className="text-[10px] text-slate-600">{new Date(req.createdAt).toLocaleString()}</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="text-right">
@@ -375,10 +470,12 @@ export default function EndUserDashboard() {
                             <div className="px-6 py-4 border-b border-white/10 flex justify-between items-center bg-white/5">
                                 <h3 className="text-lg font-bold text-white flex items-center gap-2">
                                     {activeModal === 'asset' && <Laptop className="text-blue-400" size={20} />}
+                                    {activeModal === 'byod' && <Smartphone className="text-sky-400" size={20} />}
                                     {activeModal === 'ticket' && <Ticket className="text-blue-400" size={20} />}
                                     {activeModal === 'profile' && <User className="text-blue-400" size={20} />}
 
                                     {activeModal === 'asset' && 'Request New Asset'}
+                                    {activeModal === 'byod' && 'Register BYOD Device'}
                                     {activeModal === 'ticket' && 'Raise Support Ticket'}
                                     {activeModal === 'profile' && 'My Profile'}
                                 </h3>
@@ -427,21 +524,81 @@ export default function EndUserDashboard() {
                                                 </div>
                                             </div>
                                         </>
+                                    ) : activeModal === 'byod' ? (
+                                        <>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-1.5">Device Model</label>
+                                                    <input
+                                                        type="text"
+                                                        name="device_model"
+                                                        required
+                                                        placeholder="e.g. MacBook Pro, Dell XPS"
+                                                        className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-slate-300 mb-1.5">OS Version</label>
+                                                    <input
+                                                        type="text"
+                                                        name="os_version"
+                                                        required
+                                                        placeholder="e.g. macOS Sonoma, Win 11"
+                                                        className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Serial Number</label>
+                                                <input
+                                                    type="text"
+                                                    name="serial_number"
+                                                    required
+                                                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Usage Justification</label>
+                                                <textarea
+                                                    name="reason"
+                                                    rows="2"
+                                                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                                                    placeholder="Why do you need to use your personal device for work?"
+                                                ></textarea>
+                                            </div>
+                                            <div className="bg-sky-500/10 border border-sky-500/20 p-3 rounded-lg flex gap-3">
+                                                <AlertCircle className="text-sky-400 shrink-0" size={18} />
+                                                <p className="text-[11px] text-sky-200">
+                                                    By registering, you agree to comply with the company's BYOD security policy and data access guidelines.
+                                                </p>
+                                            </div>
+                                        </>
                                     ) : (
                                         <>
                                             <div>
+                                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Subject</label>
+                                                <input
+                                                    type="text"
+                                                    name="title"
+                                                    required
+                                                    className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    placeholder="Brief summary of the issue"
+                                                />
+                                            </div>
+                                            <div>
                                                 <label className="block text-sm font-medium text-slate-300 mb-1.5">Issue Category</label>
-                                                <select className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                                    <option>Hardware Fault</option>
-                                                    <option>Software / OS Issue</option>
-                                                    <option>Network / VPN</option>
-                                                    <option>Access / Permissions</option>
-                                                    <option>Other</option>
+                                                <select name="category" className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                                    <option value="Hardware Fault">Hardware Fault</option>
+                                                    <option value="Software / OS Issue">Software / OS Issue</option>
+                                                    <option value="Network / VPN">Network / VPN</option>
+                                                    <option value="Access / Permissions">Access / Permissions</option>
+                                                    <option value="Other">Other</option>
                                                 </select>
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-slate-300 mb-1.5">Description</label>
                                                 <textarea
+                                                    name="description"
                                                     rows="4"
                                                     className="w-full bg-slate-800 border border-white/10 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                     placeholder="Describe the issue in detail..."
@@ -469,7 +626,7 @@ export default function EndUserDashboard() {
                                             type="submit"
                                             className="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-2.5 rounded-lg font-bold shadow-lg shadow-blue-500/20 transition-colors"
                                         >
-                                            {activeModal === 'asset' ? 'Submit Request' : 'Create Ticket'}
+                                            {activeModal === 'asset' ? 'Submit Request' : activeModal === 'byod' ? 'Register Device' : 'Create Ticket'}
                                         </button>
                                     </div>
                                 </form>

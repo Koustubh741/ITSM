@@ -7,14 +7,17 @@ import PieChart from '@/components/PieChart'
 import TrendLineChart from '@/components/TrendLineChart'
 import AlertsFeed from '@/components/AlertsFeed'
 import WorkflowVisualizer from '@/components/WorkflowVisualizer'
-import { initialMockAssets } from '@/data/mockAssets'
+import apiClient from '@/lib/apiClient';
+import { useRole } from '@/contexts/RoleContext';
 
 export default function SystemAdminDashboard() {
     const router = useRouter()
+    const { ROLES, user: currentUser } = useRole()
     const [loading, setLoading] = useState(true)
     const [chartMetric, setChartMetric] = useState('location')
     const [trendView, setTrendView] = useState('monthly')
-    const [timeRange, setTimeRange] = useState('Overview') // Overview, Analytics
+    const [timeRange, setTimeRange] = useState('Overview') // Overview, Analytics, Requests
+    const [pendingUsers, setPendingUsers] = useState([])
 
 
 
@@ -34,11 +37,11 @@ export default function SystemAdminDashboard() {
     });
 
     useEffect(() => {
-        // Load assets from localStorage or fallback to initial mock data
-        const loadAssets = () => {
-            const savedAssets = localStorage.getItem('assets');
-            if (savedAssets) {
-                let parsed = JSON.parse(savedAssets);
+        // Load assets from API
+        const loadAssets = async () => {
+            try {
+                const apiAssets = await apiClient.getAssets();
+                let parsed = apiAssets;
 
                 // DATA SANITIZER: Cleanup corrupted data from previous imports
                 // Checks for: Quotes, String Costs, Empty Costs, "Bulk Import", Missing Specs
@@ -113,22 +116,84 @@ export default function SystemAdminDashboard() {
                             assigned_to: cleanStr(a.assigned_to) === 'Unassigned' ? null : cleanStr(a.assigned_to),
                             assigned_by: assignedBy,
                             cost: finalCost,
-                            specs: specs
+                            specifications: specs // Ensure we use the property name from backend
                         };
                     });
-
-                    // Save cleaned data back to storage so it's fixed permanently
-                    localStorage.setItem('assets', JSON.stringify(parsed));
                 }
 
                 setAllAssets(parsed);
-            } else {
-                setAllAssets(initialMockAssets);
-                localStorage.setItem('assets', JSON.stringify(initialMockAssets));
+                setLoading(false);
+            } catch (error) {
+                console.error('Failed to load assets:', error);
+                setAllAssets([]);
+                setLoading(false);
             }
         };
+
         loadAssets();
     }, []);
+
+    const [activeUsers, setActiveUsers] = useState([])
+
+    const fetchPendingUsers = async () => {
+        try {
+            console.log('Fetching pending users, admin_id:', currentUser?.id);
+            if (!currentUser) {
+                console.warn('No currentUser found in fetchPendingUsers');
+                return;
+            }
+            const pending = await apiClient.getUsers({ status: 'PENDING', admin_user_id: currentUser.id });
+            console.log('Pending users fetched:', pending.length);
+            setPendingUsers(pending);
+            const active = await apiClient.getUsers({ status: 'ACTIVE', admin_user_id: currentUser.id });
+            setActiveUsers(active);
+        } catch (error) {
+            console.error('Failed to fetch pending users:', error);
+        }
+    }
+
+    const handleActivateUser = async (userId) => {
+        try {
+            if (!currentUser) return;
+            await apiClient.activateUser(userId, currentUser.id);
+            // Refresh list
+            fetchPendingUsers();
+        } catch (error) {
+            console.error('Failed to activate user:', error);
+            alert('Failed to activate user: ' + error.message);
+        }
+    }
+
+    const handleDenyUser = async (userId) => {
+        if (!confirm('Are you sure you want to deny this access request?')) return;
+        try {
+            if (!currentUser) return;
+            await apiClient.denyUser(userId, currentUser.id);
+            // Refresh list
+            fetchPendingUsers();
+        } catch (error) {
+            console.error('Failed to deny user:', error);
+            alert('Failed to deny user: ' + error.message);
+        }
+    }
+
+    const handleDeactivateUser = async (userId) => {
+        if (!confirm('Are you sure you want to deactivate this account?')) return;
+        try {
+            if (!currentUser) return;
+            await apiClient.request(`/auth/users/${userId}/disable?admin_user_id=${currentUser.id}`, { method: 'POST' });
+            fetchPendingUsers();
+        } catch (error) {
+            console.error('Failed to deactivate user:', error);
+            alert('Failed to deactivate user: ' + error.message);
+        }
+    }
+
+    useEffect(() => {
+        if (timeRange === 'Requests') {
+            fetchPendingUsers()
+        }
+    }, [timeRange, currentUser])
 
     useEffect(() => {
         if (allAssets.length === 0) return;
@@ -159,6 +224,7 @@ export default function SystemAdminDashboard() {
             }));
 
             allAssets.forEach(asset => {
+                if (!asset || !asset.status) return;
                 // Status Counts
                 const statusLower = asset.status.toLowerCase();
                 // "Active" in DB === "In Use" in UI
@@ -365,7 +431,7 @@ export default function SystemAdminDashboard() {
 
                     {/* View Toggles */}
                     <div className="flex bg-slate-800/50 p-1 rounded-xl">
-                        {['Overview', 'Analytics'].map((mode) => (
+                        {['Overview', 'Analytics', 'Requests'].map((mode) => (
                             <button
                                 key={mode}
                                 onClick={() => setTimeRange(mode)}
@@ -374,8 +440,13 @@ export default function SystemAdminDashboard() {
                                     : 'text-slate-400 hover:text-white hover:bg-white/5'
                                     }`}
                             >
-                                {mode === 'Overview' ? <LayoutGrid size={16} /> : <Activity size={16} />}
+                                {mode === 'Overview' ? <LayoutGrid size={16} /> : mode === 'Analytics' ? <Activity size={16} /> : <Clock size={16} />}
                                 {mode}
+                                {mode === 'Requests' && pendingUsers.length > 0 && (
+                                    <span className="flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
+                                        {pendingUsers.length}
+                                    </span>
+                                )}
                             </button>
                         ))}
                     </div>
@@ -620,7 +691,7 @@ export default function SystemAdminDashboard() {
                             </div>
                         </div>
                     </div>
-                ) : (
+                ) : timeRange === 'Analytics' ? (
                     /* ANALYTICS VIEW LAYOUT */
                     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -659,6 +730,141 @@ export default function SystemAdminDashboard() {
                                 <TrendLineChart data={trendView === 'monthly' ? stats?.trends?.monthly : stats?.trends?.quarterly} />
                             </div>
                         </div>
+                    </div>
+                ) : (
+                    /* REQUESTS / ACCESS CONTROL VIEW */
+                    <div className="glass-panel p-8 animate-in slide-in-from-bottom-4 duration-500">
+                        <div className="flex justify-between items-center mb-8">
+                            <div>
+                                <h3 className="text-2xl font-bold text-white">Access Requests</h3>
+                                <p className="text-slate-400 text-sm mt-1">Manage pending user registrations and platform access permissions.</p>
+                            </div>
+                            <div className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400 text-sm font-medium">
+                                <Activity size={16} />
+                                {pendingUsers.length} Pending Actions
+                            </div>
+                        </div>
+
+                        {pendingUsers.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-center">
+                                <div className="p-6 bg-slate-800/50 rounded-full mb-4 border border-white/5">
+                                    <CheckCircle size={48} className="text-slate-600" />
+                                </div>
+                                <h4 className="text-lg font-bold text-white">Queue is Clear</h4>
+                                <p className="text-slate-400 max-w-xs mt-2">No pending account activations found in the system registry.</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="border-b border-white/5">
+                                            <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">User</th>
+                                            <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Requested Role</th>
+                                            <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Location / Dept.</th>
+                                            <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {pendingUsers.map((user) => (
+                                            <tr key={user.id} className="group hover:bg-white/[0.02] transition-colors">
+                                                <td className="py-4">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-sm font-bold text-white">
+                                                            {user.full_name?.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-semibold text-white">{user.full_name}</p>
+                                                            <p className="text-xs text-slate-400">{user.email}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="py-4">
+                                                    <span className="px-2.5 py-1 rounded-lg bg-slate-800 border border-white/10 text-[11px] font-bold text-slate-300">
+                                                        {ROLES ? (ROLES.find(r => r.slug === user.role)?.label || user.role) : user.role}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 text-sm text-slate-400">
+                                                    {user.location || 'N/A'} <br />
+                                                    <span className="text-[10px] opacity-70">{user.department || 'N/A'}</span>
+                                                </td>
+                                                <td className="py-4 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button
+                                                            onClick={() => handleDenyUser(user.id)}
+                                                            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 text-xs font-semibold border border-white/5 transition-all"
+                                                        >
+                                                            Deny
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleActivateUser(user.id)}
+                                                            className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-lg shadow-blue-500/20"
+                                                        >
+                                                            Activate Account
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* Active Users Section */}
+                        <div className="mt-12 mb-8">
+                            <h3 className="text-2xl font-bold text-white">Active Platform Users</h3>
+                            <p className="text-slate-400 text-sm mt-1">Review and manage currently active user accounts and their access status.</p>
+                        </div>
+
+                        {activeUsers.length === 0 ? (
+                            <div className="p-8 bg-slate-800/20 border border-white/5 rounded-2xl text-center">
+                                <p className="text-slate-500 text-sm italic">No active users found (excluding system accounts).</p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="border-b border-white/5">
+                                            <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">User</th>
+                                            <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Role</th>
+                                            <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Location</th>
+                                            <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {activeUsers.map((user) => (
+                                            <tr key={user.id} className="group hover:bg-white/[0.02] transition-colors">
+                                                <td className="py-4">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="w-10 h-10 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-sm font-bold text-slate-400">
+                                                            {user.full_name?.charAt(0)}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-semibold text-white">{user.full_name}</p>
+                                                            <p className="text-xs text-slate-500">{user.email}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="py-4">
+                                                    <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-bold text-emerald-400">
+                                                        {ROLES ? (ROLES.find(r => r.slug === user.role)?.label || user.role) : user.role}
+                                                    </span>
+                                                </td>
+                                                <td className="py-4 text-sm text-slate-400">{user.location || 'N/A'}</td>
+                                                <td className="py-4 text-right">
+                                                    <button
+                                                        onClick={() => handleDeactivateUser(user.id)}
+                                                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 text-xs font-medium border border-white/5 transition-all"
+                                                    >
+                                                        Deactivate
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 )
             }

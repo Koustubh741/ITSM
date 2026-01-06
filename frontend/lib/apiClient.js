@@ -2,7 +2,7 @@
  * API Client for Asset Management Backend
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
 
 class ApiClient {
     constructor() {
@@ -46,12 +46,26 @@ class ApiClient {
             headers,
         };
 
+        // Handle body serialization
+        if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
+            config.body = JSON.stringify(config.body);
+        }
+
         try {
             const response = await fetch(url, config);
-            const data = await response.json();
+            
+            // Handle empty responses
+            const contentType = response.headers.get('content-type');
+            let data;
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                const text = await response.text();
+                data = text ? JSON.parse(text) : {};
+            }
 
             if (!response.ok) {
-                throw new Error(data.detail || 'API request failed');
+                throw new Error(data.detail || data.message || `API request failed: ${response.status}`);
             }
 
             return data;
@@ -89,6 +103,13 @@ class ApiClient {
         return data;
     }
 
+    async register(userData) {
+        return this.request('/auth/register', {
+            method: 'POST',
+            body: userData,
+        });
+    }
+
     async logout() {
         await this.request('/auth/logout', { method: 'POST' });
         this.clearToken();
@@ -117,9 +138,31 @@ class ApiClient {
 
     async updateAsset(id, assetData) {
         return this.request(`/assets/${id}`, {
-            method: 'PUT',
+            method: 'PATCH',
             body: JSON.stringify(assetData),
         });
+    }
+
+    async assignAsset(id, assignmentData) {
+        return this.request(`/assets/${id}/assign`, {
+            method: 'PATCH',
+            body: JSON.stringify(assignmentData),
+        });
+    }
+
+    async updateAssetStatus(id, status) {
+        return this.request(`/assets/${id}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        });
+    }
+
+    async getMyAssets(user) {
+        return this.request(`/assets/my-assets?user=${encodeURIComponent(user)}`);
+    }
+
+    async getAssetEvents(id) {
+        return this.request(`/assets/${id}/events`);
     }
 
     async deleteAsset(id) {
@@ -129,56 +172,183 @@ class ApiClient {
     }
 
     async getAssetStats() {
-        return this.request('/assets/stats/summary');
+        return this.request('/assets/stats');
     }
 
-    // Requests
-    async getRequests(params = {}) {
+    // Asset Requests
+    async getAssetRequests(params = {}) {
         const queryString = new URLSearchParams(params).toString();
-        return this.request(`/requests/?${queryString}`);
+        return this.request(`/asset-requests?${queryString}`);
     }
 
-    async createRequest(requestData) {
-        return this.request('/requests/', {
+    async getAssetRequest(id) {
+        return this.request(`/asset-requests/${id}`);
+    }
+
+    async createAssetRequest(requestData) {
+        return this.request('/asset-requests', {
             method: 'POST',
             body: JSON.stringify(requestData),
         });
     }
 
-    async approveRequest(id) {
-        return this.request(`/requests/${id}/approve`, {
-            method: 'PUT',
+    async managerApproveRequest(id, approvalData) {
+        return this.request(`/asset-requests/${id}/manager/approve`, {
+            method: 'POST',
+            body: JSON.stringify(approvalData || {}),
         });
+    }
+
+    async managerRejectRequest(id, rejectionData) {
+        return this.request(`/asset-requests/${id}/manager/reject`, {
+            method: 'POST',
+            body: JSON.stringify(rejectionData),
+        });
+    }
+
+    async itApproveRequest(id, approvalData) {
+        return this.request(`/asset-requests/${id}/it/approve`, {
+            method: 'POST',
+            body: JSON.stringify(approvalData || {}),
+        });
+    }
+
+    async itRejectRequest(id, rejectionData) {
+        return this.request(`/asset-requests/${id}/it/reject`, {
+            method: 'POST',
+            body: JSON.stringify(rejectionData),
+        });
+    }
+
+    async byodRegister(requestId, payload, reviewerId) {
+        return this.request(`/asset-requests/${requestId}/byod/register?reviewer_id=${reviewerId}`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+    }
+
+    async procurementApproveRequest(id, approvalData) {
+        return this.request(`/asset-requests/${id}/procurement/approve`, {
+            method: 'POST',
+            body: JSON.stringify(approvalData || {}),
+        });
+    }
+
+    async procurementRejectRequest(id, rejectionData) {
+        return this.request(`/asset-requests/${id}/procurement/reject`, {
+            method: 'POST',
+            body: JSON.stringify(rejectionData),
+        });
+    }
+
+    async procurementConfirmDelivery(id, reviewerId) {
+        return this.request(`/asset-requests/${id}/procurement/confirm-delivery?reviewer_id=${reviewerId}`, {
+            method: 'POST',
+        });
+    }
+
+    async inventoryAllocateAsset(requestId, assetId, inventoryManagerId) {
+        return this.request(`/asset-requests/${requestId}/inventory/allocate?asset_id=${assetId}&inventory_manager_id=${inventoryManagerId}`, {
+            method: 'POST',
+        });
+    }
+
+    async inventoryMarkNotAvailable(requestId, inventoryManagerId) {
+        return this.request(`/asset-requests/${requestId}/inventory/not-available?inventory_manager_id=${inventoryManagerId}`, {
+            method: 'POST',
+        });
+    }
+
+    // Legacy compatibility methods
+    async getRequests(params = {}) {
+        return this.getAssetRequests(params);
+    }
+
+    async createRequest(requestData) {
+        return this.createAssetRequest(requestData);
+    }
+
+    async approveRequest(id) {
+        return this.managerApproveRequest(id);
     }
 
     async rejectRequest(id, reason) {
-        return this.request(`/requests/${id}/reject`, {
-            method: 'PUT',
-            body: JSON.stringify({ reason }),
+        return this.managerRejectRequest(id, { rejection_reason: reason });
+    }
+
+    // Tickets
+    async getTickets(params = {}) {
+        const queryString = new URLSearchParams(params).toString();
+        return this.request(`/tickets?${queryString}`);
+    }
+
+    async getTicket(id) {
+        return this.request(`/tickets/${id}`);
+    }
+
+    async createTicket(ticketData) {
+        return this.request('/tickets', {
+            method: 'POST',
+            body: JSON.stringify(ticketData),
         });
     }
 
-    // Dashboard
-    async getDashboardStats() {
-        return this.request('/dashboard/stats');
+    async updateTicket(id, ticketData) {
+        return this.request(`/tickets/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(ticketData),
+        });
     }
 
-    async getAssetsByLocation() {
-        return this.request('/dashboard/assets-by-location');
+    async diagnoseTicket(id, diagnosisData) {
+        return this.request(`/tickets/${id}/it/diagnose`, {
+            method: 'POST',
+            body: JSON.stringify(diagnosisData),
+        });
     }
 
-    async getRecentAssets(limit = 10) {
-        return this.request(`/dashboard/recent-assets?limit=${limit}`);
+    async acknowledgeTicket(id, reviewerId) {
+        return this.request(`/tickets/${id}/acknowledge`, {
+            method: 'POST',
+            body: JSON.stringify({
+                reviewer_id: reviewerId,
+                outcome: 'acknowledge',
+                notes: 'Ticket acknowledged by IT'
+            }),
+        });
+    }
+
+    async resolveTicket(id, reviewerId, notes) {
+        return this.request(`/tickets/${id}/resolve`, {
+            method: 'POST',
+            body: JSON.stringify({
+                reviewer_id: reviewerId,
+                outcome: 'resolve',
+                notes: notes
+            }),
+        });
     }
 
     // Users
     async getUsers(params = {}) {
         const queryString = new URLSearchParams(params).toString();
-        return this.request(`/users/?${queryString}`);
+        return this.request(`/auth/users?${queryString}`);
+    }
+
+    async activateUser(userId, adminId) {
+        return this.request(`/auth/users/${userId}/activate?admin_user_id=${adminId}`, {
+            method: 'POST'
+        });
+    }
+
+    async denyUser(userId, adminId) {
+        return this.request(`/auth/users/${userId}/disable?admin_user_id=${adminId}`, {
+            method: 'POST'
+        });
     }
 
     async getUser(id) {
-        return this.request(`/users/${id}`);
+        return this.request(`/auth/users/${id}`);
     }
 
     async createUser(userData) {
@@ -200,7 +370,12 @@ class ApiClient {
 
     // Health Check
     async healthCheck() {
-        return fetch(`${this.baseURL.replace('/api', '')}/health`)
+        return fetch(`${this.baseURL}/health`)
+            .then(res => res.json());
+    }
+
+    async dbHealthCheck() {
+        return fetch(`${this.baseURL}/health/db`)
             .then(res => res.json());
     }
 }

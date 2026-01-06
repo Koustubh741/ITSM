@@ -1,6 +1,2 @@
-"""
-API Routers
-"""
-from . import assets, users, requests, dashboard, auth, departments, locations
+# Routers package
 
-__all__ = ["assets", "users", "requests", "dashboard", "auth", "departments", "locations"]

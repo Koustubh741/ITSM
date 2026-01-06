@@ -2,6 +2,7 @@ import Link from 'next/link';
 import Head from 'next/link';
 import { ArrowLeft, Plus, Ticket, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import apiClient from '@/lib/apiClient';
 
 export default function TicketsDashboard() {
     const [stats, setStats] = useState({ open: 0, pending: 0, closed: 0 });
@@ -21,51 +22,36 @@ export default function TicketsDashboard() {
     const filteredArticles = kbArticles.filter(a => a.title.toLowerCase().includes(kbQuery.toLowerCase()));
 
     useEffect(() => {
-        // Load Data to match AllTicketsPage logic
-        const savedAssets = localStorage.getItem('assets');
-        let assetList = [];
-        if (savedAssets) assetList = JSON.parse(savedAssets);
-        else {
-            const { initialMockAssets } = require('@/data/mockAssets');
-            assetList = initialMockAssets;
-        }
+        const loadTickets = async () => {
+            try {
+                const tickets = await apiClient.getTickets();
+                
+                // Map API tickets to frontend format
+                const mappedTickets = tickets.map(t => ({
+                    id: t.id,
+                    subject: t.subject,
+                    priority: t.priority || 'Medium',
+                    status: t.status || 'Open',
+                    user: t.requestor_id || 'System',
+                    created: t.created_at ? new Date(t.created_at).toLocaleDateString() : 'N/A'
+                }));
 
-        // 1. Real Status Tickets
-        const realTickets = assetList
-            .filter(a => a.status === 'Repair' || a.status === 'Maintenance')
-            .map((a, i) => ({
-                id: `TCK-${202300 + i}`,
-                subject: `${a.status} Request: ${a.name}`,
-                priority: a.status === 'Repair' ? 'High' : 'Medium',
-                status: 'Open',
-                user: a.assigned_to || 'System',
-                created: '2023-12-20'
-            }));
-
-        // 2. Random Mock Tickets (Same logic as AllTicketsPage)
-        const randomTickets = Array.from({ length: 15 }).map((_, i) => {
-            const randomAsset = assetList[Math.floor(Math.random() * assetList.length)];
-            const statuses = ['Open', 'Pending', 'Closed'];
-            return {
-                id: `TCK-GEN-${100 + i}`,
-                subject: `Issue with ${randomAsset?.name || 'Hardware'}`,
-                priority: ['Low', 'Medium', 'High'][i % 3],
-                status: statuses[i % 3],
-                user: randomAsset?.assigned_to || 'User',
-                created: '2023-12-15'
-            };
-        });
-
-        const allTickets = [...realTickets, ...randomTickets];
-
-        // Calc Stats
-        const counts = {
-            open: allTickets.filter(t => t.status === 'Open').length,
-            pending: allTickets.filter(t => t.status === 'Pending').length,
-            closed: allTickets.filter(t => t.status === 'Closed').length
+                // Calc Stats
+                const counts = {
+                    open: mappedTickets.filter(t => t.status === 'Open' || t.status === 'OPEN').length,
+                    pending: mappedTickets.filter(t => t.status === 'Pending' || t.status === 'PENDING').length,
+                    closed: mappedTickets.filter(t => t.status === 'Closed' || t.status === 'CLOSED').length
+                };
+                setStats(counts);
+                setRecentTickets(mappedTickets.slice(0, 3)); // Show first 3 as recent
+            } catch (error) {
+                console.error('Failed to load tickets:', error);
+                setStats({ open: 0, pending: 0, closed: 0 });
+                setRecentTickets([]);
+            }
         };
-        setStats(counts);
-        setRecentTickets(allTickets.slice(0, 3)); // Show first 3 as recent
+
+        loadTickets();
     }, []);
 
     const getPriorityColor = (p) => {

@@ -1,3 +1,0 @@
-Connected.
-Email: admin@itsm.com, Role: system_admin, Type: <class 'str'>
-Total: 1

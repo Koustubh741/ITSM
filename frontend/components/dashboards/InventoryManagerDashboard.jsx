@@ -1,23 +1,51 @@
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Archive, TrendingDown, AlertOctagon, CheckCircle, Package } from 'lucide-react';
 import { useAssetContext } from '@/contexts/AssetContext';
+import { useRole } from '@/contexts/RoleContext';
 
 export default function InventoryManagerDashboard() {
+    const { user } = useRole();
     const { requests, inventoryCheckAvailable, inventoryCheckNotAvailable, inventoryAllocateDelivered, assets } = useAssetContext();
 
-    // ENTERPRISE: Requests awaiting inventory check
-    const awaitingStockCheck = requests.filter(r => r.currentOwnerRole === 'ASSET_INVENTORY_MANAGER');
+    // ENTERPRISE: Requests awaiting inventory check (exclude fulfilled/closed)
+    const awaitingStockCheck = requests.filter(r => {
+        const shouldShow = r.currentOwnerRole === 'ASSET_INVENTORY_MANAGER' && 
+            r.status !== 'FULFILLED' && 
+            r.status !== 'CLOSED' &&
+            r.procurementStage !== 'DELIVERED';
+        
+        // Debug logging
+        if (r.currentOwnerRole === 'ASSET_INVENTORY_MANAGER') {
+            console.log(`[Inventory Filter] Request ${r.id}: status=${r.status}, shouldShow=${shouldShow}`);
+        }
+        
+        return shouldShow;
+    });
 
-    // ENTERPRISE: Delivered items awaiting final allocation
-    const awaitingAllocation = requests.filter(r => r.currentOwnerRole === 'ASSET_INVENTORY_MANAGER' && r.procurementStage === 'DELIVERED');
+    // ENTERPRISE: Delivered items awaiting final allocation (exclude fulfilled/closed)
+    const awaitingAllocation = requests.filter(r => 
+        (r.currentOwnerRole === 'ASSET_INVENTORY_MANAGER' && r.procurementStage === 'DELIVERED') || 
+        (r.status === 'QC_PENDING')
+    ).filter(r => r.status !== 'FULFILLED' && r.status !== 'CLOSED');
 
-    const stockData = [
-        { name: 'Laptops', stock: 120, min: 50 },
-        { name: 'Monitors', stock: 45, min: 40 },
-        { name: 'Keyboards', stock: 200, min: 100 },
-        { name: 'Headsets', stock: 15, min: 30 }, // Shortage
-        { name: 'Cables', stock: 500, min: 100 },
+    // REAL DATA: Calculate stock stats from context assets
+    const stockStats = assets.reduce((acc, asset) => {
+        const type = asset.type || 'Other';
+        if (!acc[type]) acc[type] = { name: type, stock: 0, min: 5 }; // Mock min threshold
+        if (asset.status === 'In Stock' || asset.status === 'Available') {
+            acc[type].stock += 1;
+        }
+        return acc;
+    }, {});
+
+    const realStockData = Object.values(stockStats).sort((a, b) => b.stock - a.stock);
+    const displayStockData = realStockData.length > 0 ? realStockData : [
+        { name: 'Laptops', stock: 0, min: 5 },
+        { name: 'Monitors', stock: 0, min: 5 }
     ];
+
+    const totalSKUs = new Set(assets.map(a => a.type)).size;
+    const criticalShortages = realStockData.filter(i => i.stock < i.min).length;
 
     return (
         <div className="space-y-6">
@@ -27,31 +55,37 @@ export default function InventoryManagerDashboard() {
             </header>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="glass-card p-6">
+                <div className="glass-card p-6 border border-white/5 hover:border-blue-500/30 transition-all">
                     <div className="flex justify-between">
                         <div>
-                            <p className="text-slate-400 text-xs uppercase">Total SKUs</p>
-                            <h3 className="text-3xl font-bold text-white">45</h3>
+                            <p className="text-slate-400 text-xs uppercase font-bold tracking-wider">Total SKUs</p>
+                            <h3 className="text-3xl font-bold text-white mt-1">{totalSKUs}</h3>
                         </div>
-                        <Archive className="text-blue-500" />
+                        <div className="p-3 bg-blue-500/10 rounded-xl">
+                            <Archive size={20} className="text-blue-500" />
+                        </div>
                     </div>
                 </div>
-                <div className="glass-card p-6">
+                <div className="glass-card p-6 border border-white/5 hover:border-rose-500/30 transition-all">
                     <div className="flex justify-between">
                         <div>
-                            <p className="text-slate-400 text-xs uppercase">Critical Shortages</p>
-                            <h3 className="text-3xl font-bold text-rose-500">3</h3>
+                            <p className="text-slate-400 text-xs uppercase font-bold tracking-wider">Critical Shortages</p>
+                            <h3 className="text-3xl font-bold text-rose-500 mt-1">{criticalShortages}</h3>
                         </div>
-                        <AlertOctagon className="text-rose-500" />
+                        <div className="p-3 bg-rose-500/10 rounded-xl">
+                            <AlertOctagon size={20} className="text-rose-500" />
+                        </div>
                     </div>
                 </div>
-                <div className="glass-card p-6">
+                <div className="glass-card p-6 border border-white/5 hover:border-amber-500/30 transition-all">
                     <div className="flex justify-between">
                         <div>
-                            <p className="text-slate-400 text-xs uppercase">To Reorder</p>
-                            <h3 className="text-3xl font-bold text-amber-500">8</h3>
+                            <p className="text-slate-400 text-xs uppercase font-bold tracking-wider">To Reorder</p>
+                            <h3 className="text-3xl font-bold text-amber-500 mt-1">{requests.filter(r => r.status === 'PROCUREMENT_REQUIRED').length}</h3>
                         </div>
-                        <TrendingDown className="text-amber-500" />
+                        <div className="p-3 bg-amber-500/10 rounded-xl">
+                            <TrendingDown size={20} className="text-amber-500" />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -101,16 +135,16 @@ export default function InventoryManagerDashboard() {
                                         <td className="p-3 text-right">
                                             <div className="flex justify-end gap-2">
                                                 <button
-                                                    onClick={() => {
+                                                    onClick={async () => {
                                                         const assetId = prompt(`Enter available asset ID for ${req.assetType}:`, "AST-" + Math.floor(Math.random() * 1000));
-                                                        if (assetId) inventoryCheckAvailable(req.id, assetId, "Inventory Manager");
+                                                        if (assetId) await inventoryCheckAvailable(req.id, assetId, user.name || 'Inventory Manager');
                                                     }}
                                                     className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-emerald-500/10 transition-all flex items-center gap-2"
                                                 >
                                                     <CheckCircle size={14} /> Asset Available
                                                 </button>
                                                 <button
-                                                    onClick={() => inventoryCheckNotAvailable(req.id, "Inventory Manager")}
+                                                    onClick={async () => await inventoryCheckNotAvailable(req.id, user.name || 'Inventory Manager')}
                                                     className="bg-amber-600 hover:bg-amber-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-amber-500/10 transition-all"
                                                 >
                                                     Not Available → Procurement
@@ -164,9 +198,9 @@ export default function InventoryManagerDashboard() {
                                         </td>
                                         <td className="p-3 text-right">
                                             <button
-                                                onClick={() => {
+                                                onClick={async () => {
                                                     const assetId = prompt(`Enter asset ID to allocate for ${req.assetType}:`, "AST-" + Math.floor(Math.random() * 1000));
-                                                    if (assetId) inventoryAllocateDelivered(req.id, assetId, "Inventory Manager");
+                                                    if (assetId) await inventoryAllocateDelivered(req.id, assetId, user.name || 'Inventory Manager');
                                                 }}
                                                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-emerald-500/10 transition-all flex items-center gap-2 ml-auto"
                                             >
@@ -186,7 +220,7 @@ export default function InventoryManagerDashboard() {
                     <h3 className="text-lg font-bold text-white mb-6">Stock Levels by Category</h3>
                     <div className="h-64 w-full">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={stockData}>
+                            <BarChart data={displayStockData}>
                                 <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                                 <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                                 <Tooltip
@@ -202,14 +236,14 @@ export default function InventoryManagerDashboard() {
                 <div className="glass-panel p-6">
                     <h3 className="text-lg font-bold text-white mb-4">Stock Alerts</h3>
                     <div className="space-y-4">
-                        {stockData.filter(i => i.stock < i.min).map(item => (
+                        {displayStockData.filter(i => i.stock < i.min).map(item => (
                             <div key={item.name} className="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl">
                                 <div className="flex justify-between items-center mb-2">
                                     <span className="font-bold text-rose-400">{item.name}</span>
                                     <span className="text-xs bg-rose-500 text-white px-2 py-0.5 rounded-full">Below Min</span>
                                 </div>
                                 <div className="w-full bg-slate-700 h-1.5 rounded-full overflow-hidden">
-                                    <div className="bg-rose-500 h-full" style={{ width: `${(item.stock / item.min) * 100}%` }}></div>
+                                    <div className="bg-rose-500 h-full" style={{ width: `${Math.min(100, (item.stock / item.min) * 100)}%` }}></div>
                                 </div>
                                 <div className="flex justify-between mt-2 text-xs text-slate-400">
                                     <span>Current: {item.stock}</span>

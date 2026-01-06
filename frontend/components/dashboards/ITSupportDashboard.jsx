@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Wrench, ShieldCheck, Terminal, AlertCircle, X, CheckCircle, Play, Server, Lock, Activity, ArrowRight, Trash2, Clock, MapPin, User, FileText, Check, MoreHorizontal, Printer, ChevronRight } from 'lucide-react';
-import { pendingSetupQueue, allOpenTickets, deploymentReadyAssets, disposalQueue } from '@/data/mockTechnicianData'; // Keep mock data for fallback or initialization if needed, but primary is Context
+import apiClient from '@/lib/apiClient';
 import { useAssetContext, ASSET_STATUS } from '@/contexts/AssetContext';
+import { useRole } from '@/contexts/RoleContext';
 
 // Helper Component for Manual Install Items (Step 2 of Config)
 const SoftwareInstallItem = ({ app }) => {
@@ -49,7 +50,8 @@ const SoftwareInstallItem = ({ app }) => {
 export default function ITSupportDashboard() {
     // STATE: Data Queues
 
-    const { assets, updateAssetStatus, requests: allRequests } = useAssetContext(); // Rename to avoid conflict if needed, or just use requests
+    const { user } = useRole();
+    const { assets, updateAssetStatus, requests: allRequests } = useAssetContext();
     // Actually I will cleaner refactor below
 
     // Derived state for queues instead of static state
@@ -60,14 +62,39 @@ export default function ITSupportDashboard() {
     // For now we keep ticket state local if not fully ready or use context if available (Context has tickets).
     // Let's use context tickets!
     // Unified Requests Context - ENTERPRISE WORKFLOW
-    const { requests, itApproveRequest, itRejectRequest } = useAssetContext();
+    const { requests, itApproveRequest, itRejectRequest, registerByod } = useAssetContext();
 
-    // 1. Incoming Asset Requests (Awaiting IT Management Approval)
-    // USER_REQUEST: Update filter to IT_MANAGEMENT
-    const incomingRequests = requests.filter(r => r.currentOwnerRole === 'IT_MANAGEMENT' && (r.status === 'MANAGER_APPROVED' || r.status === 'REQUESTED' /* Legacy fallback */));
+    // 1. Incoming Asset Requests (Awaiting IT Management Action)
+    const incomingRequests = requests.filter(r => 
+        r.currentOwnerRole === 'IT_MANAGEMENT' && 
+        (r.status === 'MANAGER_APPROVED' || r.status === 'IT_APPROVED' || r.status === 'REQUESTED')
+    );
 
-    // 2. Active Support Tickets (In Progress)
-    const activeTickets = requests.filter(r => r.requestType === 'SUPPORT' && (r.status === 'IN_PROGRESS' || r.status === 'OPEN'));
+    // 2. Support Tickets State (fetched from /tickets API)
+    const [tickets, setTickets] = useState([]);
+    const [ticketsLoading, setTicketsLoading] = useState(true);
+
+    // Fetch tickets from backend
+    useEffect(() => {
+        const fetchTickets = async () => {
+            try {
+                setTicketsLoading(true);
+                const fetchedTickets = await apiClient.getTickets();
+                setTickets(fetchedTickets);
+                console.log('[IT Support] Fetched tickets:', fetchedTickets);
+            } catch (error) {
+                console.error('[IT Support] Failed to fetch tickets:', error);
+                setTickets([]);
+            } finally {
+                setTicketsLoading(false);
+            }
+        };
+
+        fetchTickets();
+    }, []);
+
+    // Active Support Tickets (OPEN status)
+    const activeTickets = tickets.filter(t => t.status?.toUpperCase() === 'OPEN' || t.status?.toUpperCase() === 'IN_PROGRESS');
 
     // Deployment Queue: Assets ready for deployment
     const deployedArgs = assets.filter(a => a.status === ASSET_STATUS.READY_FOR_DEPLOYMENT);
@@ -88,6 +115,7 @@ export default function ITSupportDashboard() {
     // STATE: Ticket Resolution
     const [resolutionNotes, setResolutionNotes] = useState('');
     const [resolutionType, setResolutionType] = useState('Fixed');
+    const [activeChecklist, setActiveChecklist] = useState([]);
 
     // --- WORKFLOW ACTIONS ---
 
@@ -139,6 +167,9 @@ export default function ITSupportDashboard() {
         setSelectedItem(ticket);
         setResolutionNotes('');
         setResolutionType('Fixed');
+        // Reset Wizard
+        setConfigStep(1); 
+        setActiveChecklist([]);
         setActiveModal('RESOLVE_TICKET');
     };
 
@@ -152,6 +183,33 @@ export default function ITSupportDashboard() {
 
         setActiveModal(null);
         setSelectedItem(null);
+    };
+    
+    // Ticket Actions
+    const acknowledgeTicket = async (ticketId) => {
+        try {
+            await apiClient.acknowledgeTicket(ticketId, user.id);
+            // Refresh tickets
+            const fetchedTickets = await apiClient.getTickets();
+            setTickets(fetchedTickets);
+            alert("Ticket acknowledged!");
+        } catch (error) {
+            console.error("Failed to acknowledge ticket:", error);
+            alert("Failed to acknowledge ticket: " + error.message);
+        }
+    };
+    
+    const resolveTicket = async (ticketId, notes) => {
+        try {
+            await apiClient.resolveTicket(ticketId, user.id, notes);
+            // Refresh tickets
+            const fetchedTickets = await apiClient.getTickets();
+            setTickets(fetchedTickets);
+            alert("Ticket resolved successfully!");
+        } catch (error) {
+            console.error("Failed to resolve ticket:", error);
+            alert("Failed to resolve ticket: " + error.message);
+        }
     };
 
 
@@ -204,7 +262,7 @@ export default function ITSupportDashboard() {
                     </p>
                     <h3 className="text-3xl font-bold text-white mt-1">{activeTickets.length}</h3>
                     <div className="mt-2 text-xs text-amber-200/70 flex items-center gap-1">
-                        <Activity size={12} /> {activeTickets.filter(t => t.urgency === 'High').length} critical issues
+                        <Activity size={12} /> {activeTickets.filter(t => t.priority?.toUpperCase() === 'HIGH').length} critical issues
                     </div>
                 </div>
 
@@ -518,18 +576,27 @@ export default function ITSupportDashboard() {
                                                         <button
                                                             onClick={() => {
                                                                 const reason = prompt("Enter rejection reason:");
-                                                                if (reason) itRejectRequest(req.id, reason, "IT Admin");
+                                                                if (reason) itRejectRequest(req.id, reason, user.id, user.name);
                                                             }}
                                                             className="text-xs text-rose-400 hover:text-white border border-rose-500/30 px-3 py-1.5 rounded flex items-center gap-1"
                                                         >
                                                             Reject
                                                         </button>
-                                                        <button
-                                                            onClick={() => itApproveRequest(req.id, "IT Admin")}
-                                                            className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-medium shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/30 transition-all"
-                                                        >
-                                                            Approve & Forward to Inventory
-                                                        </button>
+                                                        {req.status === 'IT_APPROVED' && req.assetType === 'BYOD' ? (
+                                                            <button
+                                                                onClick={() => registerByod(req.id, user.id, user.name)}
+                                                                className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded font-medium shadow-lg shadow-emerald-500/10 transition-all flex items-center gap-1"
+                                                            >
+                                                                <ShieldCheck size={14} /> Validate & Register BYOD
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => itApproveRequest(req.id, user.id, user.name)}
+                                                                className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-medium shadow-lg shadow-indigo-500/10 hover:shadow-indigo-500/30 transition-all"
+                                                            >
+                                                                {req.assetType === 'BYOD' ? 'Verify & Review BYOD' : 'Approve & Forward to Inventory'}
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
@@ -540,26 +607,36 @@ export default function ITSupportDashboard() {
                                         ) : activeTickets.map(item => (
                                             <tr key={item.id} className="hover:bg-white/5 transition-colors">
                                                 <td className="p-4">
-                                                    <div className="font-bold text-white">{item.title}</div>
+                                                    <div className="font-bold text-white">{item.subject}</div>
                                                     <div className="text-xs text-slate-500 font-mono mt-0.5">{item.id}</div>
                                                 </td>
                                                 <td className="p-4">
-                                                    <div className="text-sm text-slate-300">{item.requestedBy.name}</div>
-                                                    <div className="text-xs text-slate-500">Role: {item.requestedBy.role}</div>
+                                                    <div className="text-sm text-slate-300">{item.requestor_id || 'Unknown'}</div>
+                                                    <div className="text-xs text-slate-500">User</div>
                                                 </td>
                                                 <td className="p-4">
                                                     <div className="flex items-center gap-2">
-                                                        <span className={`w-2 h-2 rounded-full ${item.urgency === 'High' ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
+                                                        <span className={`w-2 h-2 rounded-full ${item.priority?.toUpperCase() === 'HIGH' ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
                                                         <span className="text-sm text-slate-300">{item.status}</span>
                                                     </div>
                                                 </td>
                                                 <td className="p-4 text-right">
-                                                    <button
-                                                        onClick={() => openResolveModal(item)}
-                                                        className="text-xs border border-white/10 hover:bg-white/10 text-slate-300 px-4 py-2 rounded flex items-center gap-2 ml-auto transition-colors"
-                                                    >
-                                                        <CheckCircle size={14} /> Resolve Ticket
-                                                    </button>
+                                                    <div className="flex justify-end gap-2">
+                                                        {(item.status?.toUpperCase() === 'OPEN') && (
+                                                            <button
+                                                                onClick={() => acknowledgeTicket(item.id)}
+                                                                className="text-xs border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 px-3 py-1.5 rounded flex items-center gap-1 transition-colors"
+                                                            >
+                                                                <CheckCircle size={14} /> Acknowledge
+                                                            </button>
+                                                        )}
+                                                        <button
+                                                            onClick={() => openResolveModal(item)}
+                                                            className="text-xs border border-white/10 hover:bg-white/10 text-slate-300 px-4 py-2 rounded flex items-center gap-2 transition-colors ml-auto"
+                                                        >
+                                                            <CheckCircle size={14} /> Resolve Ticket
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         )))}
@@ -625,64 +702,195 @@ export default function ITSupportDashboard() {
                         </div>
                     )}
 
-                    {/* ---- TICKET RESOLUTION MODAL ---- */}
+                    {/* ---- TICKET RESOLUTION WIZARD (3 STEPS) ---- */}
                     {activeModal === 'RESOLVE_TICKET' && selectedItem && (
-                        <div className="bg-slate-900 border border-white/10 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="bg-slate-900 border border-white/10 rounded-xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
                             <div className="p-6 border-b border-white/10 bg-slate-800/50">
-                                <h3 className="text-lg font-bold text-white">Resolve Incident: {selectedItem.id}</h3>
-                                <p className="text-slate-400 text-sm mt-1">{selectedItem.issue}</p>
+                                <h3 className="text-lg font-bold text-white flex items-center justify-between">
+                                    <span>Resolve Incident: {selectedItem.id}</span>
+                                    <span className="text-xs font-mono text-slate-500 bg-slate-800 px-2 py-1 rounded">Step {configStep} of 3</span>
+                                </h3>
+                                <p className="text-slate-400 text-sm mt-1">{selectedItem.subject}</p>
                             </div>
 
-                            <div className="p-6 space-y-4">
-                                <div className="grid grid-cols-2 gap-4 bg-slate-800 p-4 rounded-lg border border-white/5">
-                                    <div>
-                                        <div className="text-xs text-slate-500 uppercase">Asset</div>
-                                        <div className="text-sm text-white">{selectedItem.asset}</div>
+                            <div className="p-6 overflow-y-auto custom-scrollbar flex-1">
+                                
+                                {/* STEP 1: DIAGNOSIS */}
+                                {configStep === 1 && (
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                                        <h4 className="text-md font-bold text-white mb-2">1. Issue Diagnosis</h4>
+                                        <div className="space-y-2">
+                                            <label className="text-sm text-slate-300">Problem Description & Root Cause</label>
+                                            <textarea
+                                                className="w-full bg-slate-950 border border-white/10 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none min-h-[120px]"
+                                                placeholder="Describe the technical issue and identified root cause..."
+                                                value={resolutionNotes}
+                                                onChange={(e) => setResolutionNotes(e.target.value)}
+                                            ></textarea>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <div className="text-xs text-slate-500 uppercase">Priority</div>
-                                        <div className="text-sm text-white">{selectedItem.priority}</div>
+                                )}
+
+                                {/* STEP 2: RESOLUTION CHECKLIST */}
+                                {configStep === 2 && (
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <h4 className="text-md font-bold text-white">2. Create Resolution Checklist</h4>
+                                            <span className="text-xs text-indigo-400 font-bold">{activeChecklist.length > 0 ? Math.round((activeChecklist.filter(i => i.checked).length / activeChecklist.length) * 100) : 0}% Complete</span>
+                                        </div>
+                                        
+                                        {/* Add Item Input */}
+                                        <div className="flex gap-2 mb-4">
+                                            <input 
+                                                type="text" 
+                                                placeholder="Add verification step..."
+                                                className="flex-1 bg-slate-950 border border-white/10 rounded-lg p-2 text-white text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' && e.target.value.trim()) {
+                                                        setActiveChecklist([...activeChecklist, { text: e.target.value.trim(), checked: false }]);
+                                                        e.target.value = '';
+                                                    }
+                                                }}
+                                                id="checklist-input"
+                                            />
+                                            <button 
+                                                onClick={() => {
+                                                    const input = document.getElementById('checklist-input');
+                                                    if (input && input.value.trim()) {
+                                                        setActiveChecklist([...activeChecklist, { text: input.value.trim(), checked: false }]);
+                                                        input.value = '';
+                                                    }
+                                                }}
+                                                className="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-sm"
+                                            >
+                                                Add
+                                            </button>
+                                        </div>
+
+                                        {/* Progress Bar */}
+                                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mb-4">
+                                            <div 
+                                                className="h-full bg-indigo-500 transition-all duration-500"
+                                                style={{ width: `${activeChecklist.length > 0 ? (activeChecklist.filter(i => i.checked).length / activeChecklist.length) * 100 : 0}%` }}
+                                            ></div>
+                                        </div>
+
+                                        {activeChecklist.length === 0 && (
+                                            <div className="text-center py-6 text-slate-500 text-sm border border-dashed border-white/10 rounded-lg">
+                                                No checklist items added. Add steps to verify resolution.
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-2">
+                                            {activeChecklist.map((item, idx) => (
+                                                <div key={idx} className={`flex items-start gap-3 p-3 rounded border transition-colors group ${item.checked ? 'bg-indigo-500/10 border-indigo-500/30' : 'bg-slate-800 border-white/5 hover:border-white/10'}`}>
+                                                    <label className="flex items-start gap-3 flex-1 cursor-pointer">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={item.checked} 
+                                                            onChange={() => {
+                                                                const newChecklist = [...activeChecklist];
+                                                                newChecklist[idx].checked = !newChecklist[idx].checked;
+                                                                setActiveChecklist(newChecklist);
+                                                            }}
+                                                            className="mt-1 w-4 h-4 rounded text-indigo-600 bg-slate-700 border-slate-600 focus:ring-indigo-500" 
+                                                        />
+                                                        <div>
+                                                            <div className={`text-sm font-medium ${item.checked ? 'text-white' : 'text-slate-300'}`}>{item.text}</div>
+                                                        </div>
+                                                    </label>
+                                                    <button 
+                                                        onClick={() => {
+                                                            const newChecklist = [...activeChecklist];
+                                                            newChecklist.splice(idx, 1);
+                                                            setActiveChecklist(newChecklist);
+                                                        }}
+                                                        className="text-slate-500 hover:text-rose-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
 
-                                <div className="space-y-1">
-                                    <label className="text-sm text-slate-300">Resolution Type</label>
-                                    <select
-                                        className="w-full bg-slate-950 border border-white/10 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-indigo-500 outline-none"
-                                        value={resolutionType}
-                                        onChange={(e) => setResolutionType(e.target.value)}
-                                    >
-                                        <option value="Fixed">Issue Fixed (Remote/On-site)</option>
-                                        <option value="Replaced">Hardware Replaced</option>
-                                        <option value="Escalated">Escalated to L3/Vendor</option>
-                                        <option value="Training">User Training Provided</option>
-                                    </select>
-                                </div>
+                                {/* STEP 3: FINAL REVIEW */}
+                                {configStep === 3 && (
+                                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+                                        <div className="text-center py-4">
+                                            <div className="w-20 h-20 rounded-full bg-emerald-500/10 text-emerald-400 border-2 border-emerald-500/20 flex items-center justify-center mx-auto mb-4">
+                                                <CheckCircle size={40} />
+                                            </div>
+                                            <h3 className="text-xl font-bold text-white">Ready to Resolve</h3>
+                                            <p className="text-slate-400 text-sm mt-1">Completion Score: <span className={`font-bold ${activeChecklist.every(i => i.checked) ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                {activeChecklist.length > 0 ? Math.round((activeChecklist.filter(i => i.checked).length / activeChecklist.length) * 100) : 0}%
+                                            </span></p>
+                                        </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-sm text-slate-300">Troubleshooting Notes & Verification</label>
-                                    <textarea
-                                        className="w-full bg-slate-950 border border-white/10 rounded-lg p-3 text-white focus:ring-2 focus:ring-indigo-500 outline-none min-h-[100px]"
-                                        placeholder="Describe steps taken to resolve..."
-                                        value={resolutionNotes}
-                                        onChange={(e) => setResolutionNotes(e.target.value)}
-                                    ></textarea>
-                                </div>
+                                        <div className="bg-slate-800/50 rounded-lg p-4 border border-white/5 space-y-3">
+                                            <div>
+                                                <span className="text-xs text-slate-500 uppercase">Diagnosis</span>
+                                                <p className="text-sm text-slate-300 mt-1">{resolutionNotes}</p>
+                                            </div>
+                                            <div>
+                                                <span className="text-xs text-slate-500 uppercase">Resolution Steps</span>
+                                                <p className="text-sm text-slate-300 mt-1">
+                                                    {activeChecklist.filter(i => i.checked).length} of {activeChecklist.length} checks completed.
+                                                </p>
+                                            </div>
+                                            <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded text-indigo-200 text-xs flex gap-2">
+                                                <Activity size={14} className="shrink-0 mt-0.5" />
+                                                Upon confirmation, the user will be notified via email with this resolution summary.
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                             </div>
 
-                            <div className="p-6 border-t border-white/10 flex justify-end gap-3 bg-white/5">
-                                <button
-                                    onClick={() => setActiveModal(null)}
-                                    className="px-4 py-2 text-slate-400 hover:text-white transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={submitResolution}
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold shadow-lg shadow-emerald-500/20"
-                                >
-                                    Mark as Resolved
-                                </button>
+                            <div className="p-6 border-t border-white/10 flex justify-end gap-3 bg-white/5 shrink-0">
+                                {configStep === 1 && (
+                                    <>
+                                        <button onClick={() => setActiveModal(null)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancel</button>
+                                        <button 
+                                            onClick={() => {
+                                                if (!resolutionNotes) return alert("Please enter a diagnosis.");
+                                                setConfigStep(2);
+                                            }}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-lg shadow-indigo-500/20"
+                                        >
+                                            Next: Checklist
+                                        </button>
+                                    </>
+                                )}
+                                {configStep === 2 && (
+                                    <>
+                                        <button onClick={() => setConfigStep(1)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Back</button>
+                                        <button 
+                                            onClick={() => {
+                                                if (activeChecklist.some(i => !i.checked)) {
+                                                    if (!confirm("Checklist is incomplete. Do you want to proceed regardless?")) return;
+                                                }
+                                                setConfigStep(3);
+                                            }}
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold shadow-lg shadow-indigo-500/20"
+                                        >
+                                            Next: Verify
+                                        </button>
+                                    </>
+                                )}
+                                {configStep === 3 && (
+                                    <>
+                                        <button onClick={() => setConfigStep(2)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Back</button>
+                                        <button 
+                                            onClick={submitResolution}
+                                            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-semibold shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+                                        >
+                                            Resolve & Notify User <ArrowRight size={16} />
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </div>
                     )}

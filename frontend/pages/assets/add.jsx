@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/router'
-import { ArrowLeft, Save, Download } from 'lucide-react'
+import { ArrowLeft, Save, Download, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import apiClient from '@/lib/apiClient'
 
 export default function AddAsset() {
     const router = useRouter()
@@ -18,6 +19,7 @@ export default function AddAsset() {
         warranty_expiry: '',
         specifications: { cpu: '', ram: '', storage: '' }
     })
+    const [isSubmitting, setIsSubmitting] = useState(false)
 
     const handleChange = (e) => {
         const { name, value } = e.target
@@ -34,9 +36,24 @@ export default function AddAsset() {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        // Mock submission - no API call
-        alert(`Asset "${formData.name}" created successfully! (Mock Mode - No Database)`)
-        router.push('/assets')
+        setIsSubmitting(true)
+        try {
+            // Prepare data for API (ensure dates are correct format or null)
+            const submissionData = {
+                ...formData,
+                purchase_date: formData.purchase_date || null,
+                warranty_expiry: formData.warranty_expiry || null
+            }
+            
+            await apiClient.createAsset(submissionData)
+            alert(`Asset "${formData.name}" created successfully in database!`)
+            router.push('/assets')
+        } catch (error) {
+            console.error('Failed to create asset:', error)
+            alert(`Error: ${error.message || 'Failed to connect to server'}`)
+        } finally {
+            setIsSubmitting(false)
+        }
     }
 
     return (
@@ -91,7 +108,7 @@ export default function AddAsset() {
                                     if (!file) return;
 
                                     const reader = new FileReader();
-                                    reader.onload = (event) => {
+                                    reader.onload = async (event) => {
                                         const text = event.target.result;
                                         if (!text) return;
 
@@ -192,12 +209,29 @@ export default function AddAsset() {
                                             return;
                                         }
 
-                                        // Megre
-                                        const existing = JSON.parse(localStorage.getItem('assets') || '[]');
-                                        const merged = [...existing, ...newAssets];
-                                        localStorage.setItem('assets', JSON.stringify(merged));
+                                        // Send to API
+                                        setIsSubmitting(true);
+                                        let successCount = 0;
+                                        let errorCount = 0;
 
-                                        alert(`Successfully imported ${newAssets.length} assets! Headers matched: ${Object.keys(map).filter(k => map[k] !== -1).length}`);
+                                        for (const asset of newAssets) {
+                                            try {
+                                                // Remove temp client-side ID before sending to server
+                                                const { id, ...assetData } = asset;
+                                                await apiClient.createAsset(assetData);
+                                                successCount++;
+                                            } catch (err) {
+                                                console.error('Failed to import asset:', asset.name, err);
+                                                errorCount++;
+                                            }
+                                        }
+
+                                        setIsSubmitting(false);
+                                        if (errorCount > 0) {
+                                            alert(`Import complete with errors. Success: ${successCount}, Failed: ${errorCount}`);
+                                        } else {
+                                            alert(`Successfully imported ${successCount} assets to database!`);
+                                        }
                                         router.push('/assets');
                                     };
                                     reader.readAsText(file);
@@ -296,9 +330,13 @@ export default function AddAsset() {
                 </div>
 
                 <div className="flex justify-end pt-6 border-t border-white/10">
-                    <button type="submit" className="btn btn-primary flex items-center space-x-2 px-8">
-                        <Save size={20} />
-                        <span>Save Asset</span>
+                    <button 
+                        type="submit" 
+                        disabled={isSubmitting}
+                        className="btn btn-primary flex items-center space-x-2 px-8 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {isSubmitting ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                        <span>{isSubmitting ? 'Saving...' : 'Save Asset'}</span>
                     </button>
                 </div>
             </form>

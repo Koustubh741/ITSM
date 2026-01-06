@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, CheckCircle, XCircle, DollarSign, Clock, AlertCircle, Eye, Filter, Calendar, Building, FileText, ChevronRight } from 'lucide-react'
-import { initialMockAssets } from '@/data/mockAssets'; // Fallback
+import apiClient from '@/lib/apiClient';
 
 // --- Helper Components ---
 
@@ -180,27 +180,36 @@ export default function Renewals() {
     const [renewalToReject, setRenewalToReject] = useState(null);
 
     useEffect(() => {
-        // Load Data Logic
-        const savedAssets = localStorage.getItem('assets');
-        let assets = savedAssets ? JSON.parse(savedAssets) : initialMockAssets;
+        const loadRenewals = async () => {
+            try {
+                // Load assets from backend API
+                const assets = await apiClient.getAssets();
 
-        const generatedRenewals = assets
-            .filter(a => a.id % 4 === 0 && a.status !== 'Retired')
-            .map(asset => {
-                let status = 'Requested';
-                if (asset.id % 3 === 0) status = 'IT_Approved';
-                if (asset.id % 5 === 0) status = 'Finance_Approved';
+                const generatedRenewals = assets
+                    .filter(a => a.id % 4 === 0 && a.status !== 'Retired')
+                    .map(asset => {
+                        let status = 'Requested';
+                        if (asset.id % 3 === 0) status = 'IT_Approved';
+                        if (asset.id % 5 === 0) status = 'Finance_Approved';
 
-                return {
-                    ...asset,
-                    renewal_id: `REN-${new Date().getFullYear()}-${String(asset.id).padStart(4, '0')}`,
-                    renewal_cost: Math.round(asset.cost * 0.15),
-                    renewal_status: status
-                };
-            });
+                        return {
+                            ...asset,
+                            renewal_id: `REN-${new Date().getFullYear()}-${String(asset.id).padStart(4, '0')}`,
+                            renewal_cost: Math.round((asset.cost || 0) * 0.15),
+                            renewal_status: status
+                        };
+                    });
 
-        setRenewals(generatedRenewals);
-        setLoading(false);
+                setRenewals(generatedRenewals);
+            } catch (error) {
+                console.error('Failed to load renewals from API:', error);
+                setRenewals([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadRenewals();
     }, [])
 
     useEffect(() => {

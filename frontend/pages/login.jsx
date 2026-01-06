@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useRole } from '@/contexts/RoleContext';
 import apiClient from '@/lib/apiClient';
-import { User, Mail, Lock, Briefcase, MapPin, Phone, ArrowRight, Check } from 'lucide-react';
+import { User, Mail, Lock, Briefcase, MapPin, Phone, ArrowRight, Check, Building2 } from 'lucide-react';
 
 export default function Login() {
     const router = useRouter();
@@ -10,19 +10,29 @@ export default function Login() {
     const [isLoginMode, setIsLoginMode] = useState(true);
     const [isAnimating, setIsAnimating] = useState(false);
 
+    const DOMAINS = [
+        { label: 'Data/AI', value: 'data/ai' },
+        { label: 'Cloud', value: 'cloud' },
+        { label: 'Cyber', value: 'cyber' },
+        { label: 'Development', value: 'development' }
+    ];
+
     // Form States
     const [formData, setFormData] = useState({
         name: '',
+        company: '', // NEW: Company Name
         email: '',
         password: '',
         confirmPassword: '',
         role: 'End User',
+        domain: 'development', // NEW: Domain selection
         location: 'New York HQ',
         phone: '',
         isManager: false // NEW: Manager toggle
     });
 
     const [error, setError] = useState('');
+    const [successMsg, setSuccessMsg] = useState('');
 
     const toggleMode = () => {
         if (isAnimating) return;
@@ -43,14 +53,12 @@ export default function Login() {
         e.preventDefault();
         setError('');
 
-        // Mock Validation
         if (!formData.email || !formData.password) {
             setError('Please fill in all required fields.');
             return;
         }
 
         if (!isLoginMode) {
-            // Register Validation
             if (formData.password !== formData.confirmPassword) {
                 setError('Passwords do not match.');
                 return;
@@ -61,30 +69,70 @@ export default function Login() {
             }
         }
 
-        // Mock Login/Register Action
-        const userData = {
-            userName: formData.name || formData.email.split('@')[0],
-            role: formData.role,
-            location: formData.location,
-            email: formData.email,
-            position: formData.isManager ? 'MANAGER' : 'EMPLOYEE' // NEW: Store position based on toggle
-        };
-
-        // Simulate Network Delay
-        // await new Promise(r => setTimeout(r, 800));
-
-        // Try Real Backend Login
         try {
-            console.log("Attempting real backend login...");
-            await apiClient.login(formData.email, formData.password);
-            console.log("Real backend login successful!");
-        } catch (e) {
-            console.warn("Real backend login failed, falling back to mock mode:", e);
-            // Continue to mock login - this ensures the app is always "clickable" and working
-        }
+            if (!isLoginMode) {
+                console.log("Attempting real backend registration...");
+                const registerData = {
+                    email: formData.email,
+                    password: formData.password,
+                    full_name: formData.name,
+                    phone: formData.phone,
+                    company: formData.company,
+                    role: ROLES.find(r => r.label === formData.role)?.slug || 'END_USER',
+                    domain: formData.role === 'End User' ? formData.domain : null,
+                    location: formData.location,
+                    position: formData.isManager ? 'MANAGER' : 'TEAM_MEMBER'
+                };
+                
+                try {
+                    await apiClient.register(registerData);
+                    console.log("Registration successful!");
+                    setSuccessMsg('Registration successful! Your account is pending administrator approval. You will be able to log in once activated.');
+                    setIsLoginMode(true);
+                    return; // Stop here, don't try to log in since status is PENDING
+                } catch (regErr) {
+                    console.error("Registration failed:", regErr);
+                    setError(regErr.message || 'Registration failed. Please try again.');
+                    return;
+                }
+            }
 
-        login(userData);
-        router.push('/'); // AuthGuard will redirect to correct dashboard
+            console.log("Attempting real backend login...");
+            const authResponse = await apiClient.login(formData.email, formData.password);
+            console.log("Real backend login successful!");
+
+            // Map backend response to what RoleContext expects
+            const userData = {
+                id: authResponse.user.id,
+                userName: authResponse.user.full_name || authResponse.user.email.split('@')[0],
+                role: authResponse.user.role,
+                location: authResponse.user.location,
+                email: authResponse.user.email,
+                position: authResponse.user.position,
+                domain: authResponse.user.domain,
+                company: authResponse.user.company,
+                createdAt: authResponse.user.created_at
+            };
+
+            login(userData);
+            router.push('/');
+        } catch (e) {
+            console.warn("Real backend auth failed:", e);
+            setError(e.message || 'Authentication failed. Please check your credentials.');
+            
+            // Optional: Keep mock fallback for demonstration if desired, but user specifically asked for DB reflection
+            /*
+            const mockUserData = {
+                userName: formData.name || formData.email.split('@')[0],
+                role: formData.role,
+                location: formData.location,
+                email: formData.email,
+                position: formData.isManager ? 'MANAGER' : 'EMPLOYEE'
+            };
+            login(mockUserData);
+            router.push('/');
+            */
+        }
     };
 
     // Lamp Glow Text Color based on mode
@@ -162,90 +210,126 @@ export default function Login() {
 
                             {/* Register Only Fields */}
                             {!isLoginMode && (
-                                <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-left-4 fade-in duration-300">
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
+                                <>
+                                    <div className="grid grid-cols-2 gap-4 animate-in slide-in-from-left-4 fade-in duration-300">
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-semibold text-slate-500 uppercase">Full Name</label>
+                                            <div className="relative">
+                                                <User size={16} className="absolute left-3 top-3 text-slate-500" />
+                                                <input
+                                                    type="text"
+                                                    name="name"
+                                                    value={formData.name}
+                                                    onChange={handleInputChange}
+                                                    placeholder="John Doe"
+                                                    className="w-full bg-slate-900/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-semibold text-slate-500 uppercase">Phone</label>
+                                            <div className="relative">
+                                                <Phone size={16} className="absolute left-3 top-3 text-slate-500" />
+                                                <input
+                                                    type="tel"
+                                                    name="phone"
+                                                    value={formData.phone}
+                                                    onChange={handleInputChange}
+                                                    placeholder="+1 (555) 000-0000"
+                                                    className="w-full bg-slate-900/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1 animate-in slide-in-from-left-4 fade-in duration-300">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Company</label>
                                         <div className="relative">
-                                            <User size={16} className="absolute left-3 top-3 text-slate-500" />
+                                            <Building2 size={16} className="absolute left-3 top-3 text-slate-500" />
                                             <input
                                                 type="text"
-                                                name="name"
-                                                value={formData.name}
+                                                name="company"
+                                                value={formData.company}
                                                 onChange={handleInputChange}
-                                                placeholder="John Doe"
+                                                placeholder="Company Name"
                                                 className="w-full bg-slate-900/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
                                             />
                                         </div>
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-semibold text-slate-500 uppercase">Phone</label>
+
+                                    <div className="space-y-1 animate-in slide-in-from-left-4 fade-in duration-300">
+                                        <label className="text-xs font-semibold text-slate-500 uppercase">Role</label>
                                         <div className="relative">
-                                            <Phone size={16} className="absolute left-3 top-3 text-slate-500" />
-                                            <input
-                                                type="tel"
-                                                name="phone"
-                                                value={formData.phone}
+                                            <Briefcase size={16} className="absolute left-3 top-3 text-slate-500" />
+                                            <select
+                                                name="role"
+                                                value={formData.role}
                                                 onChange={handleInputChange}
-                                                placeholder="+1 (555) 000-0000"
-                                                className="w-full bg-slate-900/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-purple-500 transition-colors"
-                                            />
+                                                className={`w-full bg-slate-900/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none transition-colors appearance-none cursor-pointer hover:bg-white/5 focus:border-purple-500`}
+                                            >
+                                                {ROLES.map(role => (
+                                                    <option key={role.label} value={role.label} className="bg-slate-900">{role.label}</option>
+                                                ))}
+                                            </select>
+                                            <div className="absolute right-4 top-3 pointer-events-none text-slate-500">▼</div>
                                         </div>
                                     </div>
-                                </div>
-                            )}
 
-                            {/* Common Fields */}
-                            <div className="space-y-1">
-                                <label className="text-xs font-semibold text-slate-500 uppercase">Role</label>
-                                <div className="relative">
-                                    <Briefcase size={16} className="absolute left-3 top-3 text-slate-500" />
-                                    <select
-                                        name="role"
-                                        value={formData.role}
-                                        onChange={handleInputChange}
-                                        className={`w-full bg-slate-900/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none transition-colors appearance-none cursor-pointer hover:bg-white/5 ${isLoginMode ? 'focus:border-emerald-500' : 'focus:border-purple-500'}`}
-                                    >
-                                        {ROLES.map(role => (
-                                            <option key={role.label} value={role.label} className="bg-slate-900">{role.label}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-4 top-3 pointer-events-none text-slate-500">▼</div>
-                                </div>
-                            </div>
+                                    {/* Manager/Employee Toggle - ONLY for End User role */}
+                                    {formData.role === 'End User' && (
+                                        <div className="space-y-4 animate-in slide-in-from-top-4 fade-in duration-300">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Are you a Manager?</label>
+                                                <div className="flex gap-4">
+                                                    <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${!formData.isManager
+                                                        ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                                                        : 'border-white/10 bg-slate-900/50 text-slate-400 hover:bg-white/5'
+                                                        }`}>
+                                                        <input
+                                                            type="radio"
+                                                            name="isManager"
+                                                            checked={!formData.isManager}
+                                                            onChange={() => setFormData({ ...formData, isManager: false })}
+                                                            className="sr-only"
+                                                        />
+                                                        <span className="font-medium text-sm">👤 Employee</span>
+                                                    </label>
+                                                    <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.isManager
+                                                        ? 'border-purple-500/50 bg-purple-500/10 text-purple-400'
+                                                        : 'border-white/10 bg-slate-900/50 text-slate-400 hover:bg-white/5'
+                                                        }`}>
+                                                        <input
+                                                            type="radio"
+                                                            name="isManager"
+                                                            checked={formData.isManager}
+                                                            onChange={() => setFormData({ ...formData, isManager: true })}
+                                                            className="sr-only"
+                                                        />
+                                                        <span className="font-medium text-sm">👔 Manager</span>
+                                                    </label>
+                                                </div>
+                                            </div>
 
-                            {/* NEW: Manager/Employee Toggle - ONLY for End User role */}
-                            {formData.role === 'End User' && (
-                                <div className="space-y-2 animate-in slide-in-from-top-4 fade-in duration-300">
-                                    <label className="text-xs font-semibold text-slate-500 uppercase">Are you a Manager?</label>
-                                    <div className="flex gap-4">
-                                        <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${!formData.isManager
-                                            ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
-                                            : 'border-white/10 bg-slate-900/50 text-slate-400 hover:bg-white/5'
-                                            }`}>
-                                            <input
-                                                type="radio"
-                                                name="isManager"
-                                                checked={!formData.isManager}
-                                                onChange={() => setFormData({ ...formData, isManager: false })}
-                                                className="sr-only"
-                                            />
-                                            <span className="font-medium text-sm">👤 Employee</span>
-                                        </label>
-                                        <label className={`flex-1 flex items-center justify-center gap-2 p-3 rounded-xl border cursor-pointer transition-all ${formData.isManager
-                                            ? 'border-purple-500/50 bg-purple-500/10 text-purple-400'
-                                            : 'border-white/10 bg-slate-900/50 text-slate-400 hover:bg-white/5'
-                                            }`}>
-                                            <input
-                                                type="radio"
-                                                name="isManager"
-                                                checked={formData.isManager}
-                                                onChange={() => setFormData({ ...formData, isManager: true })}
-                                                className="sr-only"
-                                            />
-                                            <span className="font-medium text-sm">👔 Manager</span>
-                                        </label>
-                                    </div>
-                                </div>
+                                            {/* Domain Selection */}
+                                            <div className="space-y-1">
+                                                <label className="text-xs font-semibold text-slate-500 uppercase">Choose Domain</label>
+                                                <div className="relative">
+                                                    <Briefcase size={16} className="absolute left-3 top-3 text-slate-500" />
+                                                    <select
+                                                        name="domain"
+                                                        value={formData.domain}
+                                                        onChange={handleInputChange}
+                                                        className={`w-full bg-slate-900/50 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white focus:outline-none transition-colors appearance-none cursor-pointer hover:bg-white/5 focus:border-purple-500`}
+                                                    >
+                                                        {DOMAINS.map(domain => (
+                                                            <option key={domain.value} value={domain.value} className="bg-slate-900">{domain.label}</option>
+                                                        ))}
+                                                    </select>
+                                                    <div className="absolute right-4 top-3 pointer-events-none text-slate-500">▼</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
                             )}
 
                             <div className="space-y-1">
@@ -314,6 +398,10 @@ export default function Login() {
 
                             {error && (
                                 <p className="text-rose-400 text-xs mt-2 text-center animate-pulse">{error}</p>
+                            )}
+
+                            {successMsg && (
+                                <p className="text-emerald-400 text-xs mt-2 text-center animate-bounce">{successMsg}</p>
                             )}
 
                             <div className="pt-2">

@@ -1,346 +1,274 @@
-"""
-SQLAlchemy ORM Models for Asset Management System
-"""
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Date, Numeric, Text, ForeignKey, Enum as SQLEnum, ARRAY
-from sqlalchemy.dialects.postgresql import JSONB, INET
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, String, Date, Float, DateTime, JSON, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
+import uuid
+from datetime import datetime
 from database import Base
-import enum
-
-
-# Enums
-class UserRole(str, enum.Enum):
-    END_USER = "end_user"
-    IT_SUPPORT = "it_support"
-    INVENTORY_MANAGER = "inventory_manager"
-    ASSET_OWNER = "asset_owner"
-    SYSTEM_ADMIN = "system_admin"
-
-
-class AssetStatus(str, enum.Enum):
-    AVAILABLE = "available"
-    IN_USE = "in_use"
-    IN_REPAIR = "in_repair"
-    MAINTENANCE = "maintenance"
-    RETIRED = "retired"
-    DISPOSED = "disposed"
-
-
-class AssetSegment(str, enum.Enum):
-    IT = "IT"
-    NON_IT = "NON_IT"
-
-
-class AssetCondition(str, enum.Enum):
-    EXCELLENT = "excellent"
-    GOOD = "good"
-    FAIR = "fair"
-    POOR = "poor"
-    NEEDS_REPAIR = "needs_repair"
-
-
-class RequestType(str, enum.Enum):
-    NEW_ASSET = "new_asset"
-    TRANSFER = "transfer"
-    RENEWAL = "renewal"
-    SERVICE = "service"
-    DISPOSAL = "disposal"
-    REPAIR = "repair"
-    UPGRADE = "upgrade"
-
-
-class RequestStatus(str, enum.Enum):
-    PENDING = "pending"
-    UNDER_REVIEW = "under_review"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    CANCELLED = "cancelled"
-
-
-class UrgencyLevel(str, enum.Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
-    CRITICAL = "critical"
-
-
-# Models
-class Department(Base):
-    __tablename__ = "departments"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, nullable=False)
-    code = Column(String(20), unique=True)
-    description = Column(Text)
-    manager_id = Column(Integer, ForeignKey("users.id"))
-    budget = Column(Numeric(15, 2))
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relationships
-    users = relationship("User", back_populates="department", foreign_keys="User.department_id")
-
-
-class Location(Base):
-    __tablename__ = "locations"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)
-    code = Column(String(20), unique=True)
-    address = Column(Text)
-    city = Column(String(50))
-    state = Column(String(50))
-    country = Column(String(50), default="India")
-    postal_code = Column(String(10))
-    contact_person = Column(String(100))
-    contact_phone = Column(String(20))
-    active = Column(Boolean, default=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relationships
-    users = relationship("User", back_populates="location")
-    assets = relationship("Asset", back_populates="location")
-
-
-class User(Base):
-    __tablename__ = "users"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
-    first_name = Column(String(50), nullable=False)
-    last_name = Column(String(50), nullable=False)
-    role = Column(String(50), nullable=False, default="end_user", index=True)
-    phone = Column(String(20))
-    employee_id = Column(String(50), unique=True, index=True)
-    department_id = Column(Integer, ForeignKey("departments.id"), index=True)
-    location_id = Column(Integer, ForeignKey("locations.id"), index=True)
-    is_active = Column(Boolean, default=True)
-    last_login = Column(DateTime(timezone=True))
-    password_reset_token = Column(String(255))
-    password_reset_expires = Column(DateTime(timezone=True))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relationships
-    department = relationship("Department", back_populates="users", foreign_keys=[department_id])
-    location = relationship("Location", back_populates="users")
-    assigned_assets = relationship("Asset", back_populates="assigned_user", foreign_keys="Asset.assigned_to")
-    owned_assets = relationship("Asset", back_populates="owner", foreign_keys="Asset.owner_id")
-    requests = relationship("Request", back_populates="requester", foreign_keys="Request.requester_id")
-
-
-class AssetCategory(Base):
-    __tablename__ = "asset_categories"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, nullable=False)
-    segment = Column(String(50), nullable=False)
-    description = Column(Text)
-    depreciation_rate = Column(Numeric(5, 2))
-    useful_life_years = Column(Integer)
-    parent_category_id = Column(Integer, ForeignKey("asset_categories.id"))
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relationships
-    assets = relationship("Asset", back_populates="category")
-
 
 class Asset(Base):
+    """
+    Asset model matching the AssetBase schema
+    """
     __tablename__ = "assets"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    asset_tag = Column(String(50), unique=True, nullable=False, index=True)
-    name = Column(String(200), nullable=False)
-    category_id = Column(Integer, ForeignKey("asset_categories.id"), index=True)
-    segment = Column(String(50), nullable=False, index=True)
-    status = Column(String(50), default="available", index=True)
-    condition = Column(String(50), default="good")
-    
-    # Assignment
-    assigned_to = Column(Integer, ForeignKey("users.id"), index=True)
-    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
-    department_id = Column(Integer, ForeignKey("departments.id"), index=True)
-    location_id = Column(Integer, ForeignKey("locations.id"), index=True)
-    
-    # Financial
-    purchase_date = Column(Date)
-    purchase_cost = Column(Numeric(15, 2))
-    current_value = Column(Numeric(15, 2))
-    currency = Column(String(3), default="INR")
-    vendor = Column(String(100))
-    invoice_number = Column(String(50))
-    
-    # Specifications (JSONB)
-    specifications = Column(JSONB, default={})
-    
-    # Warranty & Maintenance
-    warranty_start_date = Column(Date)
-    warranty_end_date = Column(Date, index=True)
-    warranty_provider = Column(String(100))
-    last_maintenance_date = Column(Date)
-    next_maintenance_date = Column(Date, index=True)
-    maintenance_frequency_days = Column(Integer)
-    
-    # Compliance & Audit
-    compliance_status = Column(Boolean, default=True)
-    last_audit_date = Column(Date, index=True)
-    next_audit_date = Column(Date)
-    verification_status = Column(String(50))
-    verified_at = Column(DateTime(timezone=True))
-    verified_by = Column(Integer, ForeignKey("users.id"))
-    
-    # QR & Barcode
-    qr_code_url = Column(Text)
-    barcode_url = Column(Text)
-    
-    # Additional Info
-    serial_number = Column(String(100))
-    model_number = Column(String(100))
-    manufacturer = Column(String(100))
-    notes = Column(Text)
-    
-    # Soft Delete
-    is_deleted = Column(Boolean, default=False, index=True)
-    deleted_at = Column(DateTime(timezone=True))
-    deleted_by = Column(Integer, ForeignKey("users.id"))
-    
-    # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    created_by = Column(Integer, ForeignKey("users.id"))
-    
-    # Relationships
-    category = relationship("AssetCategory", back_populates="assets")
-    assigned_user = relationship("User", back_populates="assigned_assets", foreign_keys=[assigned_to])
-    owner = relationship("User", back_populates="owned_assets", foreign_keys=[owner_id])
-    location = relationship("Location", back_populates="assets")
-    lifecycle_events = relationship("AssetLifecycleEvent", back_populates="asset")
+    __table_args__ = {"schema": "asset"}
 
+    # Primary key
+    id = Column(
+        String,
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+        index=True
+    )
 
-class AssetLifecycleEvent(Base):
-    __tablename__ = "asset_lifecycle_events"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False, index=True)
-    event_type = Column(String(50), nullable=False, index=True)
-    performed_by = Column(Integer, ForeignKey("users.id"))
-    event_timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    
-    # State tracking
-    previous_status = Column(String(50))
-    new_status = Column(String(50))
-    previous_assigned_to = Column(Integer, ForeignKey("users.id"))
-    new_assigned_to = Column(Integer, ForeignKey("users.id"))
-    previous_location_id = Column(Integer, ForeignKey("locations.id"))
-    new_location_id = Column(Integer, ForeignKey("locations.id"))
-    
-    # Additional metadata
-    event_metadata = Column(JSONB, default={})
-    notes = Column(Text)
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    # Relationships
-    asset = relationship("Asset", back_populates="lifecycle_events")
+    # Basic Asset Information
+    name = Column(String(255), nullable=False, index=True)
+    type = Column(String(100), nullable=False)
+    model = Column(String(255), nullable=False)
+    vendor = Column(String(255), nullable=False)
+    serial_number = Column(String(255), nullable=False, unique=True, index=True)
+    segment = Column(String(50), nullable=False, default="IT")
 
-
-class Request(Base):
-    __tablename__ = "requests"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    request_number = Column(String(50), unique=True, nullable=False, index=True)
-    type = Column(String(50), nullable=False, index=True)
-    status = Column(String(50), default="pending", index=True)
-    urgency = Column(String(50), default="medium")
-    
-    # Requester Info
-    requester_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    department_id = Column(Integer, ForeignKey("departments.id"), index=True)
-    
-    # Asset Related
-    asset_id = Column(Integer, ForeignKey("assets.id"), index=True)
-    
-    # Request Details
-    title = Column(String(200), nullable=False)
-    description = Column(Text, nullable=False)
-    reason = Column(Text)
-    justification = Column(Text)
-    
-    # Financial
-    estimated_cost = Column(Numeric(15, 2))
-    approved_budget = Column(Numeric(15, 2))
-    currency = Column(String(3), default="INR")
-    
     # Dates
-    requested_date = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    required_by_date = Column(Date)
-    approved_date = Column(DateTime(timezone=True))
-    rejected_date = Column(DateTime(timezone=True))
-    completed_date = Column(DateTime(timezone=True))
-    
-    # Approvals
-    approved_by = Column(Integer, ForeignKey("users.id"))
-    rejected_by = Column(Integer, ForeignKey("users.id"))
-    rejection_reason = Column(Text)
-    
+    purchase_date = Column(Date, nullable=True)
+    warranty_expiry = Column(Date, nullable=True, index=True)
+    assignment_date = Column(Date, nullable=True)
+
+    # Status and Location
+    status = Column(String(50), nullable=False, index=True)
+    location = Column(String(255), nullable=True)
+
     # Assignment
-    assigned_to = Column(Integer, ForeignKey("users.id"))
+    assigned_to = Column(String(255), nullable=True)
+    assigned_by = Column(String(255), nullable=True)
+
+    # Specifications
+    specifications = Column(JSON, nullable=True, default={})
+
+    # Financial
+    cost = Column(Float, nullable=True, default=0.0)
+
+    # Renewal Workflow Fields
+    renewal_status = Column(String(50), nullable=True)
+    renewal_cost = Column(Float, nullable=True)
+    renewal_reason = Column(Text, nullable=True)
+    renewal_urgency = Column(String(20), nullable=True)
+
+    # Procurement & Disposal Fields
+    procurement_status = Column(String(50), nullable=True)
+    disposal_status = Column(String(50), nullable=True)
+
+    # Timestamps
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<Asset(id={self.id}, name={self.name}, status={self.status})>"
+
+
+class AssetAssignment(Base):
+    """
+    Asset assignment history
+    """
+    __tablename__ = "asset_assignments"
+    __table_args__ = {"schema": "asset"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    asset_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, nullable=False, index=True)
+    assigned_by = Column(String, nullable=True)
+    location = Column(String(255), nullable=True)
+    assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class User(Base):
+    """
+    User model for authentication and role management
+    """
+    __tablename__ = "users"
+    __table_args__ = {"schema": "auth"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    role = Column(String(50), nullable=False, default="END_USER")
+    status = Column(String(50), nullable=False, default="PENDING", index=True)  # PENDING | ACTIVE | EXITING | DISABLED
+    position = Column(String(50), nullable=True)  # MANAGER | TEAM_MEMBER
+    domain = Column(String(50), nullable=True)  # DATA_AI | CLOUD | SECURITY | DEVELOPMENT
+    department = Column(String(100), nullable=True)
+    location = Column(String(100), nullable=True)
+    phone = Column(String(20), nullable=True)
+    company = Column(String(255), nullable=True) # New field
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<User(id={self.id}, email={self.email}, role={self.role}, status={self.status})>"
+
+class Ticket(Base):
+    """
+    Ticket model for Help Desk/Incidents
+    """
+    __tablename__ = "tickets"
+    __table_args__ = {"schema": "helpdesk"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    # Using a readable ID like TCK-101 is common, but basic UUID is safer for MVP.
+    # We can add a sequence or display_id later.
     
-    # Additional metadata
-    request_metadata = Column(JSONB, default={})
-    attachments = Column(JSONB, default=[])
+    subject = Column(String(255), nullable=False)
+    description = Column(Text, nullable=False)
+    
+    status = Column(String(50), default="Open", index=True) # Open, Pending, Closed
+    priority = Column(String(20), default="Medium") # Low, Medium, High
+    category = Column(String(50), nullable=True) # Hardware, Software, Network
+    
+    # Relations (Using string IDs to avoid complex foreign key constraints for MVP if simple)
+    # Ideally should use ForeignKey("auth.users.id") but cross-schema FKs need care.
+    requestor_id = Column(String, nullable=True) 
+    assigned_to_id = Column(String, nullable=True)
+    related_asset_id = Column(String, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<Ticket(id={self.id}, subject={self.subject}, status={self.status})>"
+
+class AssetRequest(Base):
+    """
+    Asset Request model for managing asset requests and approvals
+    """
+    __tablename__ = "asset_requests"
+    __table_args__ = {"schema": "asset"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    
+    # Requester information
+    requester_id = Column(String, nullable=False, index=True)
+    
+    # Asset details (can be linked to existing asset or new asset request)
+    asset_id = Column(String, nullable=True)  # If requesting existing asset
+    asset_name = Column(String(255), nullable=False)
+    asset_type = Column(String(100), nullable=False)  # Laptop, Server, etc. (asset category)
+    asset_ownership_type = Column(String(50), nullable=True)  # COMPANY_OWNED | BYOD
+    asset_model = Column(String(255), nullable=True)
+    asset_vendor = Column(String(255), nullable=True)
+    serial_number = Column(String(255), nullable=True)
+    os_version = Column(String(100), nullable=True)
+    cost_estimate = Column(Float, nullable=True)
+    justification = Column(Text, nullable=True)
+    business_justification = Column(Text, nullable=True)  # Required for new requests
+    reason = Column(Text, nullable=True) # Matches DB column
+    priority = Column(String(20), default="Medium")
+    
+    # Status tracking - Unified state machine
+    # Valid states: SUBMITTED | MANAGER_APPROVED | MANAGER_REJECTED | IT_APPROVED | IT_REJECTED | 
+    # PROCUREMENT_REQUESTED | PROCUREMENT_APPROVED | PROCUREMENT_REJECTED | QC_PENDING | QC_FAILED |
+    # BYOD_COMPLIANCE_CHECK | BYOD_REJECTED | USER_ACCEPTANCE_PENDING | USER_REJECTED | IN_USE | CLOSED
+    status = Column(String(50), nullable=False, default="SUBMITTED", index=True)
+    
+    # Manager approvals (JSON array of approval decisions)
+    manager_approvals = Column(JSON, nullable=True, default=list)
+
+    # IT review tracking (for audit trail - status field is source of truth)
+    it_reviewed_by = Column(String, nullable=True)
+    it_reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Procurement & Finance approval tracking
+    procurement_finance_status = Column(String(50), nullable=True)  # APPROVED | REJECTED
+    procurement_finance_reviewed_by = Column(String, nullable=True)
+    procurement_finance_reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    procurement_finance_rejection_reason = Column(Text, nullable=True)
+    
+    # Quality Check (QC) fields
+    qc_status = Column(String(50), nullable=True)  # PENDING | PASSED | FAILED
+    qc_performed_by = Column(String, nullable=True)
+    qc_performed_at = Column(DateTime(timezone=True), nullable=True)
+    qc_notes = Column(Text, nullable=True)
+    
+    # User acceptance tracking
+    user_acceptance_status = Column(String(50), nullable=True)  # PENDING | ACCEPTED | REJECTED
+    user_accepted_at = Column(DateTime(timezone=True), nullable=True)
     
     # Timestamps
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-    
-    # Relationships
-    requester = relationship("User", back_populates="requests", foreign_keys=[requester_id])
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), default=datetime.now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), default=datetime.now, onupdate=func.now(), nullable=False)
+
+    def __repr__(self):
+        return f"<AssetRequest(id={self.id}, requester_id={self.requester_id}, status={self.status})>"
 
 
-class Notification(Base):
-    __tablename__ = "notifications"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    type = Column(String(50), nullable=False)
-    title = Column(String(200), nullable=False)
-    message = Column(Text, nullable=False)
-    
-    # Related entities
-    related_asset_id = Column(Integer, ForeignKey("assets.id"))
-    related_request_id = Column(Integer, ForeignKey("requests.id"))
-    
-    # Link/Action
-    action_url = Column(Text)
-    
-    # Status
-    is_read = Column(Boolean, default=False, index=True)
-    read_at = Column(DateTime(timezone=True))
-    
-    # Priority
-    priority = Column(String(50), default="medium")
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+class ByodDevice(Base):
+    """
+    BYOD device registry - tracks approved personal devices
+    """
+    __tablename__ = "byod_devices"
+    __table_args__ = {"schema": "asset"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    request_id = Column(String, nullable=False, index=True)
+    owner_id = Column(String, nullable=False, index=True)
+
+    device_model = Column(String(255), nullable=False)
+    os_version = Column(String(100), nullable=False)
+    serial_number = Column(String(255), nullable=False, index=True)
+
+    compliance_status = Column(String(50), nullable=False, default="COMPLIANT")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class PurchaseRequest(Base):
+    """
+    Purchase request for company-owned assets
+    """
+    __tablename__ = "purchase_requests"
+    __table_args__ = {"schema": "procurement"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    asset_request_id = Column(String, nullable=False, index=True)
+    asset_id = Column(String, nullable=True, index=True)
+
+    requester_id = Column(String, nullable=False, index=True)
+    asset_name = Column(String(255), nullable=False)
+    asset_type = Column(String(100), nullable=False)
+    asset_model = Column(String(255), nullable=True)
+    asset_vendor = Column(String(255), nullable=True)
+    cost_estimate = Column(Float, nullable=True)
+
+    status = Column(String(50), nullable=False, default="Requested")  # Requested | Approved | Ordered | Received
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class ExitRequest(Base):
+    """
+    User exit / resignation workflow
+    """
+    __tablename__ = "exit_requests"
+    __table_args__ = {"schema": "exit"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    user_id = Column(String, nullable=False, index=True)
+    status = Column(String(50), nullable=False, default="OPEN")  # OPEN | ASSETS_PROCESSED | BYOD_PROCESSED | COMPLETED
+
+    assets_snapshot = Column(JSON, nullable=True)
+    byod_snapshot = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
 class AuditLog(Base):
+    """
+    Audit Log for system events
+    """
     __tablename__ = "audit_logs"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    entity_type = Column(String(50), nullable=False, index=True)
-    entity_id = Column(Integer, nullable=False, index=True)
-    action = Column(String(50), nullable=False)
-    performed_by = Column(Integer, ForeignKey("users.id"), index=True)
-    changes = Column(JSONB, default={})
-    ip_address = Column(INET)
-    user_agent = Column(Text)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = {"schema": "system"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    entity_type = Column(String(50), nullable=False) # Asset, Ticket, User
+    entity_id = Column(String, nullable=False)
+    action = Column(String(50), nullable=False) # Created, Updated, Deleted, Login
+    performed_by = Column(String, nullable=True) # User ID or Name
+    details = Column(JSON, nullable=True)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

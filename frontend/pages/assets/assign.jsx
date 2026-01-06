@@ -18,7 +18,7 @@ export default function AssignAsset() {
         if (!id) return
         const fetchAsset = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/assets/${id}`)
+                const res = await axios.get(`http://127.0.0.1:8000/assets/${id}`)
                 setAsset(res.data)
                 setFormData(prev => ({
                     ...prev,
@@ -38,7 +38,7 @@ export default function AssignAsset() {
     const handleSubmit = async (e) => {
         e.preventDefault()
         try {
-            await axios.patch(`http://localhost:8000/assets/${id}/assign`, formData)
+            await axios.patch(`http://127.0.0.1:8000/assets/${id}/assign`, formData)
             router.push(`/assets/${id}`)
         } catch (error) {
             console.error("Failed to assign asset", error)

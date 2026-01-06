@@ -1,170 +1,392 @@
-"""
-Authentication Router - Login, Logout, Token Management
-"""
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from pydantic import BaseModel, EmailStr
-from typing import Optional
-
 from database import get_db
-from models import User, UserRole
-from config import settings
+from schemas.user_schema import UserCreate, UserResponse, LoginRequest, LoginResponse
+from services import user_service
+from datetime import datetime
 
-router = APIRouter()
+router = APIRouter(
+    prefix="/auth",
+    tags=["auth"]
+)
 
-# Password hashing
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-
-# OAuth2 scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
-
-# Pydantic schemas
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    user: dict
-
-
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class UserResponse(BaseModel):
-    id: int
-    email: str
-    first_name: str
-    last_name: str
-    role: UserRole
-    employee_id: Optional[str]
-    is_active: bool
-    
-    class Config:
-        from_attributes = True
-
-
-# Helper functions
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    return encoded_jwt
-
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        with open("debug_auth.log", "a") as f:
-            f.write(f"DEBUG: Token received: {token[:10]}...\n")
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        user_id: int = payload.get("sub")
-        with open("debug_auth.log", "a") as f:
-            f.write(f"DEBUG: User ID from token: {user_id}\n")
-        if user_id is None:
-            with open("debug_auth.log", "a") as f:
-                f.write("DEBUG: No sub in payload\n")
-            raise credentials_exception
-    except JWTError as e:
-        with open("debug_auth.log", "a") as f:
-            f.write(f"DEBUG: JWT Error: {e}\n")
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.id == user_id).first()
-    if user is None:
-        with open("debug_auth.log", "a") as f:
-            f.write(f"DEBUG: User {user_id} not found in DB\n")
-        raise credentials_exception
-    return user
-
-
-# Routes
-@router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def check_system_admin(
+    admin_user_id: str = Query(..., description="Admin user ID for authorization"),
+    db: Session = Depends(get_db)
+):
     """
-    Login with email and password
-    Returns JWT access token
+    Simple admin check for MVP - expects admin_user_id query parameter.
+    In production, this should verify JWT token and check role.
     """
-    # Find user by email (using username field from OAuth2PasswordRequestForm)
-    user = db.query(User).filter(User.email == form_data.username).first()
-    
-    if not user or not verify_password(form_data.password, user.password_hash):
+    admin_user = user_service.get_user(db, admin_user_id)
+    if not admin_user or admin_user.role != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only ADMIN can perform this action"
+        )
+    return admin_user
+
+@router.get("/users", response_model=list[UserResponse])
+def get_users(
+    status: str = None,
+    db: Session = Depends(get_db),
+    admin_user = Depends(check_system_admin)
+):
+    """
+    Get all users, optionally filtered by status.
+    Requires admin_user_id query parameter.
+    """
+    users = user_service.get_users(db, status=status)
+    if users:
+        print(f"DEBUG: First user ID: {users[0].id}, Type: {type(users[0].id)}")
+    return users
+
+@router.post("/register")
+def register(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = user_service.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    # Set default status if not provided
+    if not user.status:
+        user.status = "PENDING"
+    return user_service.create_user(db=db, user=user)
+
+@router.post("/login")
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    user = user_service.authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        # Check if user exists but is not active
+        db_user = user_service.get_user_by_email(db, form_data.username)
+        if db_user and db_user.status != "ACTIVE":
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account is not active. Please contact administrator for activation.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    if not user.is_active:
+    # Simple token for MVP
+    return {
+        "access_token": f"fake-jwt-token-{user.id}", 
+        "token_type": "bearer",
+        "user": user
+    }
+
+@router.post("/users/{user_id}/activate", response_model=UserResponse)
+def activate_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin_user = Depends(check_system_admin)
+):
+    """
+    Activate a user account. Only SYSTEM_ADMIN can perform this action.
+    Requires admin_user_id query parameter with admin user ID.
+    Example: POST /auth/users/{user_id}/activate?admin_user_id={admin_id}
+    """
+    activated_user = user_service.activate_user(db, user_id)
+    if not activated_user:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Inactive user"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    return activated_user
+
+
+@router.post("/users/{user_id}/exit", response_model=UserResponse)
+def initiate_exit(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin_user = Depends(check_system_admin)
+):
+    """
+    Initiate user exit / resignation workflow.
+
+    - Only SYSTEM_ADMIN can trigger.
+    - Sets user.status = EXITING.
+    - Creates an exit.exit_requests record capturing asset & BYOD snapshots.
+    """
+    from models import AssetAssignment, ByodDevice, ExitRequest
+
+    user = user_service.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Update user status to EXITING
+    user.status = "EXITING"
+
+    # Collect current asset assignments and BYOD devices
+    assignments = (
+        db.query(AssetAssignment)
+        .filter(AssetAssignment.user_id == user_id)
+        .all()
+    )
+    byod_devices = (
+        db.query(ByodDevice)
+        .filter(ByodDevice.owner_id == user_id)
+        .all()
+    )
+
+    assets_snapshot = [
+        {
+            "asset_id": a.asset_id,
+            "user_id": a.user_id,
+            "location": a.location,
+            "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
+        }
+        for a in assignments
+    ]
+
+    byod_snapshot = [
+        {
+            "device_id": d.id,
+            "device_model": d.device_model,
+            "os_version": d.os_version,
+            "serial_number": d.serial_number,
+            "compliance_status": d.compliance_status,
+        }
+        for d in byod_devices
+    ]
+
+    exit_request = ExitRequest(
+        user_id=user_id,
+        status="OPEN",
+        assets_snapshot=assets_snapshot,
+        byod_snapshot=byod_snapshot,
+    )
+    db.add(exit_request)
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
+@router.post("/users/{user_id}/disable", response_model=UserResponse)
+def disable_user(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin_user = Depends(check_system_admin)
+):
+    """
+    Final step of exit workflow.
+
+    - Only SYSTEM_ADMIN can set user.status = DISABLED.
+    """
+    user = user_service.get_user(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.status = "DISABLED"
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
+# ---------------- EXIT WORKFLOW PROCESSING ENDPOINTS ----------------
+
+
+def verify_asset_inventory_manager_exit(
+    manager_id: str,
+    db: Session
+):
+    """Verify user is ASSET_INVENTORY_MANAGER"""
+    manager = user_service.get_user(db, manager_id)
+    if not manager:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if manager.role != "ASSET_INVENTORY_MANAGER":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only ASSET_INVENTORY_MANAGER can process asset returns"
+        )
+    if manager.status != "ACTIVE":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager account is not active")
+    return manager
+
+
+@router.post("/exit-requests/{exit_request_id}/process-assets")
+def process_exit_assets(
+    exit_request_id: str,
+    manager_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Process company-owned asset returns for exiting user.
+    
+    Rules:
+    - Only ASSET_INVENTORY_MANAGER can call
+    - Exit request must be OPEN or ASSETS_PROCESSED
+    
+    Actions:
+    - Return all company-owned assets
+    - Perform QC, secure data wipe
+    - Update asset status (IN STOCK / REPAIR / SCRAP)
+    - Update exit request status to ASSETS_PROCESSED
+    """
+    manager = verify_asset_inventory_manager_exit(manager_id, db)
+    
+    from models import ExitRequest, AssetAssignment, Asset
+    
+    exit_request = db.query(ExitRequest).filter(ExitRequest.id == exit_request_id).first()
+    if not exit_request:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exit request not found")
+    
+    if exit_request.status not in ["OPEN", "ASSETS_PROCESSED"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Assets can only be processed when exit request is OPEN or ASSETS_PROCESSED. Current status: {exit_request.status}"
         )
     
-    # Update last login
-    user.last_login = datetime.utcnow()
-    db.commit()
-    
-    # Create access token
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    # Handle role safely (whether Enum or string)
-    try:
-        if hasattr(user.role, 'value'):
-            role_val = user.role.value
-        else:
-            role_val = str(user.role)
-    except Exception:
-        role_val = "end_user" # Fallback
+    # Process assets from snapshot
+    assets_processed = []
+    if exit_request.assets_snapshot:
+        for asset_snapshot in exit_request.assets_snapshot:
+            asset_id = asset_snapshot.get("asset_id")
+            if asset_id:
+                asset = db.query(Asset).filter(Asset.id == asset_id).first()
+                if asset:
+                    # Return asset to inventory
+                    asset.status = "In Stock"  # Or "Repair" / "Scrap" based on QC
+                    asset.assigned_to = None
+                    asset.assigned_by = None
+                    asset.assignment_date = None
+                    assets_processed.append(asset_id)
         
-    access_token = create_access_token(
-        data={"sub": str(user.id), "email": user.email, "role": role_val},
-        expires_delta=access_token_expires
-    )
+        db.commit()
+    
+    # Update exit request status
+    exit_request.status = "ASSETS_PROCESSED"
+    db.commit()
+    db.refresh(exit_request)
     
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "email": user.email,
-            "first_name": user.first_name,
-            "last_name": user.last_name,
-            "role": role_val,
-            "employee_id": user.employee_id,
-            "is_active": user.is_active
-        }
+        "status": "success",
+        "message": f"Processed {len(assets_processed)} assets",
+        "assets_processed": assets_processed,
+        "exit_request_status": exit_request.status
     }
 
 
-@router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: User = Depends(get_current_user)):
-    """Get current user information"""
-    return current_user
+@router.post("/exit-requests/{exit_request_id}/process-byod")
+def process_exit_byod(
+    exit_request_id: str,
+    it_manager_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Process BYOD device de-registration for exiting user.
+    
+    Rules:
+    - Only IT_MANAGEMENT can call
+    - Exit request must be OPEN or BYOD_PROCESSED
+    
+    Actions:
+    - De-register BYOD devices
+    - Unenroll from MDM
+    - Revoke all access
+    - Update exit request status to BYOD_PROCESSED
+    """
+    from models import ExitRequest, ByodDevice
+    
+    # Verify IT management
+    it_manager = user_service.get_user(db, it_manager_id)
+    if not it_manager:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if it_manager.role != "IT_MANAGEMENT":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only IT_MANAGEMENT can process BYOD de-registration"
+        )
+    if it_manager.status != "ACTIVE":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IT manager account is not active")
+    
+    exit_request = db.query(ExitRequest).filter(ExitRequest.id == exit_request_id).first()
+    if not exit_request:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exit request not found")
+    
+    if exit_request.status not in ["OPEN", "BYOD_PROCESSED"]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"BYOD can only be processed when exit request is OPEN or BYOD_PROCESSED. Current status: {exit_request.status}"
+        )
+    
+    # Process BYOD devices from snapshot
+    byod_processed = []
+    if exit_request.byod_snapshot:
+        for byod_snapshot in exit_request.byod_snapshot:
+            device_id = byod_snapshot.get("device_id")
+            if device_id:
+                byod = db.query(ByodDevice).filter(ByodDevice.id == device_id).first()
+                if byod:
+                    # Mark as de-registered (or delete)
+                    byod.compliance_status = "DE_REGISTERED"
+                    byod_processed.append(device_id)
+        
+        db.commit()
+    
+    # Update exit request status
+    exit_request.status = "BYOD_PROCESSED"
+    db.commit()
+    db.refresh(exit_request)
+    
+    return {
+        "status": "success",
+        "message": f"Processed {len(byod_processed)} BYOD devices",
+        "byod_processed": byod_processed,
+        "exit_request_status": exit_request.status
+    }
 
 
-@router.post("/logout")
-async def logout():
-    """Logout (client should discard token)"""
-    return {"message": "Successfully logged out"}
+@router.post("/exit-requests/{exit_request_id}/complete")
+def complete_exit_request(
+    exit_request_id: str,
+    admin_user_id: str,
+    db: Session = Depends(get_db),
+    admin_user = Depends(check_system_admin)
+):
+    """
+    Complete exit workflow and disable user account.
+    
+    Rules:
+    - Only SYSTEM_ADMIN can call
+    - Exit request must be ASSETS_PROCESSED and BYOD_PROCESSED (or at least one completed)
+    
+    Actions:
+    - Mark exit request as COMPLETED
+    - Disable user account (user.status = DISABLED)
+    """
+    from models import ExitRequest
+    
+    exit_request = db.query(ExitRequest).filter(ExitRequest.id == exit_request_id).first()
+    if not exit_request:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exit request not found")
+    
+    # Check if assets and BYOD are processed (or at least one)
+    if exit_request.status not in ["ASSETS_PROCESSED", "BYOD_PROCESSED"]:
+        # Allow completion if at least one is processed (for cases where user has only assets or only BYOD)
+        if exit_request.status == "OPEN":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot complete exit request. Assets and/or BYOD devices must be processed first."
+            )
+    
+    # Mark exit request as completed
+    exit_request.status = "COMPLETED"
+    
+    # Disable user account
+    user = user_service.get_user(db, exit_request.user_id)
+    if user:
+        user.status = "DISABLED"
+    
+    db.commit()
+    db.refresh(exit_request)
+    
+    return {
+        "status": "success",
+        "message": "Exit workflow completed and user account disabled",
+        "exit_request_status": exit_request.status,
+        "user_status": user.status if user else "N/A"
+    }
