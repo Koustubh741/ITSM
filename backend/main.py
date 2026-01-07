@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import traceback
+from datetime import datetime
 from routers import upload, workflows
 
 # Create FastAPI app instance
@@ -14,23 +15,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Debug Exception Handler
-@app.exception_handler(Exception)
-async def debug_exception_handler(request: Request, exc: Exception):
-    print(f"DEBUG EXCEPTION: {exc}")
-    traceback.print_exc()
-    with open("exception.log", "w") as f:
-        f.write(traceback.format_exc())
-    return JSONResponse(
-        status_code=500,
-        content={"detail": str(exc), "traceback": traceback.format_exc()},
-        headers={
-            "Access-Control-Allow-Origin": "http://localhost:3000",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*"
-        }
-    )
+import os
 
 # Configure CORS
 # Allow all origins in development - restrict in production
@@ -41,11 +26,39 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
+        "http://localhost:5173", # Vite default
+        "http://127.0.0.1:5173",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Debug Exception Handler
+@app.exception_handler(Exception)
+async def debug_exception_handler(request: Request, exc: Exception):
+    # Log the full error internally
+    print(f"ERROR: {exc}")
+    traceback.print_exc()
+    with open("exception.log", "a") as f:
+        f.write(f"\n--- {datetime.now()} ---\n")
+        f.write(traceback.format_exc())
+    
+    # Check if we are in debug mode
+    is_debug = os.getenv("DEBUG", "false").lower() == "true"
+    
+    content = {"detail": "Internal Server Error"}
+    if is_debug:
+        content["detail"] = str(exc)
+        content["traceback"] = traceback.format_exc()
+        
+    return JSONResponse(
+        status_code=500,
+        content=content,
+        headers={"Access-Control-Allow-Origin": "http://localhost:3000"}
+    )
 
 # Register routers
 app.include_router(upload.router)

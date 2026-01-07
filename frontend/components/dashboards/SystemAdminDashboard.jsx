@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/router'
-import { Package, CheckCircle, AlertTriangle, Clock, Activity, Download, Plus, Layers, LayoutGrid, Calendar, ArrowUpRight, DollarSign, TrendingDown, ShoppingBag } from 'lucide-react'
+import { Package, CheckCircle, AlertTriangle, Clock, Activity, Download, Plus, Layers, LayoutGrid, Calendar, ArrowUpRight, DollarSign, TrendingDown, ShoppingBag, LogOut, Trash, FileText, Filter, Search, UserPlus, Users, Settings } from 'lucide-react'
 import BarChart from '@/components/BarChart'
 import PieChart from '@/components/PieChart'
 import TrendLineChart from '@/components/TrendLineChart'
@@ -9,6 +9,7 @@ import AlertsFeed from '@/components/AlertsFeed'
 import WorkflowVisualizer from '@/components/WorkflowVisualizer'
 import apiClient from '@/lib/apiClient';
 import { useRole } from '@/contexts/RoleContext';
+import { sanitizeAsset, calculateDashboardStats } from '@/utils/assetNormalizer';
 
 export default function SystemAdminDashboard() {
     const router = useRouter()
@@ -37,91 +38,10 @@ export default function SystemAdminDashboard() {
     });
 
     useEffect(() => {
-        // Load assets from API
         const loadAssets = async () => {
             try {
                 const apiAssets = await apiClient.getAssets();
-                let parsed = apiAssets;
-
-                // DATA SANITIZER: Cleanup corrupted data from previous imports
-                // Checks for: Quotes, String Costs, Empty Costs, "Bulk Import", Missing Specs
-                const needsCleaning = parsed.some(a =>
-                    (typeof a.name === 'string' && (a.name.includes('"') || a.name.startsWith("'"))) ||
-                    typeof a.cost === 'string' ||
-                    a.cost === 0 ||
-                    a.assigned_by === 'Bulk Import' ||
-                    (a.segment === 'IT' && !a.specs && (a.type === 'Laptop' || a.type === 'Desktop')) // Check for missing specs
-                );
-
-                if (needsCleaning) {
-                    console.log("Detected corrupted data. Running sanitizer...");
-                    parsed = parsed.map(a => {
-                        const cleanStr = (s) => s ? String(s).replace(/^["']|["']$/g, '').trim() : s;
-                        const parseVal = (v) => {
-                            if (!v) return 0;
-                            if (typeof v === 'number') return v;
-                            const n = parseFloat(String(v).replace(/[₹$,\s]/g, ''));
-                            return isNaN(n) ? 0 : n;
-                        };
-
-                        // Clean status string first
-                        let st = cleanStr(a.status);
-                        if (st && (st.match(/active/i) || st.match(/in use/i))) st = 'In Use';
-
-                        // COST PATCHING: If cost is 0, assign realistic mock value based on type
-                        let finalCost = parseVal(a.cost);
-                        if (finalCost === 0) {
-                            const t = (a.type || '').toLowerCase();
-                            if (t.includes('laptop')) finalCost = Math.floor(Math.random() * (85000 - 45000) + 45000);
-                            else if (t.includes('desktop') || t.includes('mac')) finalCost = Math.floor(Math.random() * (70000 - 35000) + 35000);
-                            else if (t.includes('monitor')) finalCost = Math.floor(Math.random() * (25000 - 8000) + 8000);
-                            else if (t.includes('access') || t.includes('keybw') || t.includes('mouse')) finalCost = Math.floor(Math.random() * (5000 - 500) + 500);
-                            else finalCost = Math.floor(Math.random() * (15000 - 5000) + 5000); // Default
-                        }
-
-                        // ASSIGNED BY PATCHING
-                        let assignedBy = cleanStr(a.assigned_by);
-                        if (assignedBy === 'Bulk Import') assignedBy = 'Admin';
-
-                        // SPECS PATCHING: Generate specs for IT assets if missing
-                        let specs = a.specs || {};
-                        const typeLower = (a.type || '').toLowerCase();
-                        if (!a.specs && a.segment === 'IT') {
-                            const processors = ['Intel Core i5', 'Intel Core i7', 'Intel Core i9', 'AMD Ryzen 5', 'AMD Ryzen 7', 'Apple M1', 'Apple M2'];
-                            const rams = ['8GB', '16GB', '32GB', '64GB'];
-                            const storages = ['256GB SSD', '512GB SSD', '1TB SSD', '2TB SSD'];
-                            const os = ['Windows 10 Pro', 'Windows 11 Pro', 'macOS Ventura', 'macOS Sonoma', 'Ubuntu Linux'];
-
-                            if (typeLower.includes('laptop') || typeLower.includes('desktop') || typeLower.includes('mac')) {
-                                specs = {
-                                    processor: processors[Math.floor(Math.random() * processors.length)],
-                                    ram: rams[Math.floor(Math.random() * rams.length)],
-                                    storage: storages[Math.floor(Math.random() * storages.length)],
-                                    os: os[Math.floor(Math.random() * os.length)]
-                                };
-                            } else if (typeLower.includes('monitor')) {
-                                specs = { resolution: '4K UHD', refresh_rate: '60Hz', panel: 'IPS' };
-                            }
-                        }
-
-                        return {
-                            ...a,
-                            name: cleanStr(a.name),
-                            segment: cleanStr(a.segment),
-                            type: cleanStr(a.type),
-                            model: cleanStr(a.model),
-                            serial_number: cleanStr(a.serial_number),
-                            status: st,
-                            location: cleanStr(a.location),
-                            assigned_to: cleanStr(a.assigned_to) === 'Unassigned' ? null : cleanStr(a.assigned_to),
-                            assigned_by: assignedBy,
-                            cost: finalCost,
-                            specifications: specs // Ensure we use the property name from backend
-                        };
-                    });
-                }
-
-                setAllAssets(parsed);
+                setAllAssets(apiAssets.map(sanitizeAsset));
                 setLoading(false);
             } catch (error) {
                 console.error('Failed to load assets:', error);
@@ -129,11 +49,11 @@ export default function SystemAdminDashboard() {
                 setLoading(false);
             }
         };
-
         loadAssets();
     }, []);
 
     const [activeUsers, setActiveUsers] = useState([])
+    const [exitRequests, setExitRequests] = useState([])
 
     const fetchPendingUsers = async () => {
         try {
@@ -147,6 +67,9 @@ export default function SystemAdminDashboard() {
             setPendingUsers(pending);
             const active = await apiClient.getUsers({ status: 'ACTIVE', admin_user_id: currentUser.id });
             setActiveUsers(active);
+
+            const exits = await apiClient.getExitRequests({ admin_user_id: currentUser.id });
+            setExitRequests(exits);
         } catch (error) {
             console.error('Failed to fetch pending users:', error);
         }
@@ -178,14 +101,26 @@ export default function SystemAdminDashboard() {
     }
 
     const handleDeactivateUser = async (userId) => {
-        if (!confirm('Are you sure you want to deactivate this account?')) return;
+        if (!confirm('Are you sure you want to deactivate this account directly? This skips the official exit process.')) return;
         try {
             if (!currentUser) return;
-            await apiClient.request(`/auth/users/${userId}/disable?admin_user_id=${currentUser.id}`, { method: 'POST' });
+            await apiClient.denyUser(userId, currentUser.id);
             fetchPendingUsers();
         } catch (error) {
             console.error('Failed to deactivate user:', error);
             alert('Failed to deactivate user: ' + error.message);
+        }
+    }
+
+    const handleInitiateExit = async (userId) => {
+        if (!confirm('Are you sure you want to initiate the exit process for this user? This will create an exit request and reclaim assets.')) return;
+        try {
+            if (!currentUser) return;
+            await apiClient.initiateExit(userId, currentUser.id);
+            fetchPendingUsers();
+        } catch (error) {
+            console.error('Failed to initiate exit:', error);
+            alert('Failed to initiate exit: ' + error.message);
         }
     }
 
@@ -197,141 +132,9 @@ export default function SystemAdminDashboard() {
 
     useEffect(() => {
         if (allAssets.length === 0) return;
-
-        // Dynamic Calculation Logic
-        const calculateStats = () => {
-            const totals = {
-                active: 0,
-                repair: 0,
-                maintenance: 0,
-                retired: 0,
-                in_stock: 0,
-                it: 0,
-                non_it: 0,
-                total: allAssets.length,
-                value: 0
-            };
-
-            const segments = {};
-            const types = {};
-            const locations = {};
-
-            // Monthly Trend Buckets (Jan-Dec)
-            const monthlyTrends = Array(12).fill(0).map((_, i) => ({
-                name: new Date(0, i).toLocaleString('default', { month: 'short' }),
-                repaired: 0, // Mocked distribution
-                renewed: 0   // Based on purchase_date
-            }));
-
-            allAssets.forEach(asset => {
-                if (!asset || !asset.status) return;
-                // Status Counts
-                const statusLower = asset.status.toLowerCase();
-                // "Active" in DB === "In Use" in UI
-                if (statusLower === 'active' || statusLower === 'in use') totals.active++;
-                else if (statusLower.includes('repair')) totals.repair++;
-                else if (statusLower.includes('maintenance')) totals.maintenance++;
-                else if (statusLower.includes('retired')) totals.retired++;
-                else if (statusLower.includes('stock')) totals.in_stock++;
-
-                // Segment Counts
-                const segmentLower = (asset.segment || '').toLowerCase();
-                if (segmentLower === 'it') totals.it++;
-                else if (segmentLower === 'non-it' || segmentLower === 'non it') totals.non_it++;
-
-
-                // Value
-                totals.value += (asset.cost || 0);
-
-                // Segment
-                segments[asset.segment] = (segments[asset.segment] || 0) + 1;
-
-                // Type
-                types[asset.type] = (types[asset.type] || 0) + 1;
-
-                // Location - EXACT MATCH
-                locations[asset.location] = (locations[asset.location] || 0) + 1;
-
-                // Trends
-                if (asset.purchase_date) {
-                    const date = new Date(asset.purchase_date);
-                    if (!isNaN(date)) {
-                        const month = date.getMonth();
-                        monthlyTrends[month].renewed += 1;
-
-                        // Deterministic mock logic for repairs:
-                        // If asset ID is divisible by 3, pretend it was repaired 2 months after purchase (wrapping around year)
-                        if (asset.id % 3 === 0) {
-                            const repairMonth = (month + 2) % 12;
-                            monthlyTrends[repairMonth].repaired += 1;
-                        }
-                    }
-                }
-            });
-
-            // Format for Charts
-            const by_location = Object.entries(locations).map(([name, value]) => ({ name, value }));
-            const by_segment = Object.entries(segments).map(([name, value]) => ({ name, value }));
-            const by_type = Object.entries(types).map(([name, value]) => ({ name, value }));
-            const by_status = [
-                { name: 'In Use', value: totals.active },
-                { name: 'Repair', value: totals.repair },
-                { name: 'Retired', value: totals.retired },
-                { name: 'In Stock', value: totals.in_stock }
-            ];
-
-            // Quarterly Aggregation
-            const quarterlyTrends = [
-                { name: 'Q1', repaired: 0, renewed: 0 },
-                { name: 'Q2', repaired: 0, renewed: 0 },
-                { name: 'Q3', repaired: 0, renewed: 0 },
-                { name: 'Q4', repaired: 0, renewed: 0 },
-            ];
-
-            monthlyTrends.forEach((m, index) => {
-                const qIndex = Math.floor(index / 3);
-                quarterlyTrends[qIndex].repaired += m.repaired;
-                quarterlyTrends[qIndex].renewed += m.renewed;
-            });
-
-            // Warranty Risk Calculation
-            const today = new Date();
-            const warningDate = new Date();
-            warningDate.setDate(today.getDate() + 30);
-
-            let warrantyRiskCount = 0;
-            allAssets.forEach(asset => {
-                if (asset.warranty_expiry) {
-                    const expiry = new Date(asset.warranty_expiry);
-                    if (expiry >= today && expiry <= warningDate) {
-                        warrantyRiskCount++;
-                    }
-                }
-            });
-
-            setStats({
-                total: totals.total,
-                active: totals.active,
-                repair: totals.repair,
-                maintenance: totals.maintenance,
-                in_stock: totals.in_stock,
-                it: totals.it,
-                non_it: totals.non_it,
-                warranty_risk: warrantyRiskCount,
-                total_value: totals.value,
-                by_status,
-                by_segment,
-                by_type,
-                by_location,
-                trends: {
-                    monthly: monthlyTrends,
-                    quarterly: quarterlyTrends
-                }
-            });
-            setLoading(false);
-        };
-
-        calculateStats(); // Run calculations
+        const newStats = calculateDashboardStats(allAssets);
+        if (newStats) setStats(newStats);
+        setLoading(false);
     }, [allAssets]);
 
     const handleExport = () => {
@@ -810,6 +613,60 @@ export default function SystemAdminDashboard() {
                             </div>
                         )}
 
+                        {/* Exit Requests Section */}
+                        {exitRequests.length > 0 && (
+                            <div className="mt-12 mb-8 animate-in fade-in duration-700">
+                                <h3 className="text-2xl font-bold text-white flex items-center gap-2">
+                                    <LogOut className="text-orange-400" size={24} />
+                                    Ongoing Exit Workflows
+                                </h3>
+                                <p className="text-slate-400 text-sm mt-1">Users currently in the process of leaving the organization. Reclaim assets before finalizing.</p>
+                                
+                                <div className="mt-6 overflow-x-auto">
+                                    <table className="w-full text-left">
+                                        <thead>
+                                            <tr className="border-b border-white/5">
+                                                <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">User ID</th>
+                                                <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+                                                <th className="pb-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Assets to Reclaim</th>
+                                                <th className="pb-3 text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-white/5">
+                                            {exitRequests.map((req) => (
+                                                <tr key={req.id} className="group hover:bg-white/[0.02] transition-colors">
+                                                    <td className="py-4 font-mono text-xs text-slate-300">{req.user_id}</td>
+                                                    <td className="py-4">
+                                                        <span className={`px-2 py-1 rounded text-[10px] font-bold ${
+                                                            req.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-orange-500/10 text-orange-400'
+                                                        }`}>
+                                                            {req.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="py-4 text-sm text-slate-400">
+                                                        {req.assets_snapshot?.length || 0} Company • {req.byod_snapshot?.length || 0} BYOD
+                                                    </td>
+                                                    <td className="py-4 text-right">
+                                                        <button
+                                                            onClick={() => handleCompleteExit(req.id)}
+                                                            disabled={req.status === 'COMPLETED'}
+                                                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                                                                req.status === 'COMPLETED' 
+                                                                ? 'bg-slate-800 text-slate-600 cursor-not-allowed' 
+                                                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                                            }`}
+                                                        >
+                                                            Finalize Deactivation
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Active Users Section */}
                         <div className="mt-12 mb-8">
                             <h3 className="text-2xl font-bold text-white">Active Platform Users</h3>
@@ -851,13 +708,21 @@ export default function SystemAdminDashboard() {
                                                     </span>
                                                 </td>
                                                 <td className="py-4 text-sm text-slate-400">{user.location || 'N/A'}</td>
-                                                <td className="py-4 text-right">
-                                                    <button
-                                                        onClick={() => handleDeactivateUser(user.id)}
-                                                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 text-xs font-medium border border-white/5 transition-all"
-                                                    >
-                                                        Deactivate
-                                                    </button>
+                                                 <td className="py-4 text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <button
+                                                            onClick={() => handleInitiateExit(user.id)}
+                                                            className="px-4 py-2 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 text-xs font-medium border border-orange-500/20 transition-all"
+                                                        >
+                                                            Initiate Exit
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeactivateUser(user.id)}
+                                                            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 text-xs font-medium border border-white/5 transition-all"
+                                                        >
+                                                            Deactivate
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}

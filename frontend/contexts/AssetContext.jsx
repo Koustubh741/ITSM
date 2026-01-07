@@ -39,6 +39,7 @@ const AssetContext = createContext();
 export function AssetProvider({ children }) {
     const [assets, setAssets] = useState([]);
     const [requests, setRequests] = useState([]);
+    const [exitRequests, setExitRequests] = useState([]);
     const [loading, setLoading] = useState(true);
 
     // --- Persistence ---
@@ -164,6 +165,16 @@ export function AssetProvider({ children }) {
                 });
 
                 setRequests([...mappedAssetRequests, ...mappedTickets]);
+                
+                // 3) Load exit requests (only for relevant roles)
+                if (currentRole?.slug === 'ADMIN' || 
+                    currentRole?.slug === 'ASSET_MANAGER' || 
+                    currentRole?.slug === 'IT_MANAGEMENT'
+                ) {
+                    const apiExitRequests = await apiClient.getExitRequests({ admin_user_id: user.id });
+                    setExitRequests(apiExitRequests);
+                }
+
                 if (typeof window !== 'undefined') localStorage.removeItem('enterprise_requests');
             } catch (reqErr) {
                 console.warn("Non‑critical: failed to load asset requests or tickets from API:", reqErr);
@@ -790,6 +801,34 @@ export function AssetProvider({ children }) {
         }
     };
 
+    // --- EXIT WORKFLOW FUNCTIONS ---
+    const processExitAssets = async (requestId, managerId) => {
+        try {
+            await apiClient.processExitAssets(requestId, managerId);
+            setExitRequests(prev => prev.map(req => 
+                req.id === requestId ? { ...req, status: 'ASSETS_PROCESSED' } : req
+            ));
+            // Refresh assets because they were returned to stock
+            const refreshedAssets = await apiClient.getAssets();
+            setAssets(refreshedAssets);
+        } catch (e) {
+            console.error("Failed to process exit assets:", e);
+            throw e;
+        }
+    };
+
+    const processExitByod = async (requestId, itManagerId) => {
+        try {
+            await apiClient.processExitByod(requestId, itManagerId);
+            setExitRequests(prev => prev.map(req => 
+                req.id === requestId ? { ...req, status: 'BYOD_PROCESSED' } : req
+            ));
+        } catch (e) {
+            console.error("Failed to process exit BYOD:", e);
+            throw e;
+        }
+    };
+
     // --- Asset Management Functions ---
     const updateAssetStatus = async (assetId, newStatus) => {
         try {
@@ -849,6 +888,9 @@ export function AssetProvider({ children }) {
             updateAssetStatus,
             assignAsset,
             updateAsset,
+            exitRequests,
+            processExitAssets,
+            processExitByod,
             refreshData: loadData,
             // Backward compatibility
             managerApproveRequest,

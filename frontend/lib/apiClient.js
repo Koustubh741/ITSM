@@ -371,6 +371,36 @@ class ApiClient {
         });
     }
 
+    // Exits
+    async getExitRequests(params = {}) {
+        const queryString = new URLSearchParams(params).toString();
+        return this.request(`/auth/exit-requests?${queryString}`);
+    }
+
+    async initiateExit(userId, adminId) {
+        return this.request(`/auth/users/${userId}/exit?admin_user_id=${adminId}`, {
+            method: 'POST'
+        });
+    }
+
+    async processExitAssets(exitRequestId, managerId) {
+        return this.request(`/auth/exit-requests/${exitRequestId}/process-assets?manager_id=${managerId}`, {
+            method: 'POST'
+        });
+    }
+
+    async processExitByod(exitRequestId, itManagerId) {
+        return this.request(`/auth/exit-requests/${exitRequestId}/process-byod?it_manager_id=${itManagerId}`, {
+            method: 'POST'
+        });
+    }
+
+    async completeExitRequest(exitRequestId, adminId) {
+        return this.request(`/auth/exit-requests/${exitRequestId}/complete?admin_user_id=${adminId}`, {
+            method: 'POST'
+        });
+    }
+
     // Departments
     async getDepartments() {
         return this.request('/departments/');

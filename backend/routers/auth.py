@@ -3,7 +3,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from database import get_db
 from schemas.user_schema import UserCreate, UserResponse, LoginRequest, LoginResponse
+from schemas.exit_schema import ExitRequestResponse
 from services import user_service
+from utils import auth_utils
 from datetime import datetime
 
 router = APIRouter(
@@ -52,7 +54,7 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
         user.status = "PENDING"
     return user_service.create_user(db=db, user=user)
 
-@router.post("/login")
+@router.post("/login", response_model=LoginResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = user_service.authenticate_user(db, form_data.username, form_data.password)
     if not user:
@@ -69,9 +71,12 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # Simple token for MVP
+    # Real JWT token
+    access_token = auth_utils.create_access_token(
+        data={"sub": user.email, "user_id": str(user.id), "role": user.role}
+    )
     return {
-        "access_token": f"fake-jwt-token-{user.id}", 
+        "access_token": access_token, 
         "token_type": "bearer",
         "user": user
     }
@@ -205,6 +210,22 @@ def verify_asset_inventory_manager_exit(
     if manager.status != "ACTIVE":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager account is not active")
     return manager
+
+
+@router.get("/exit-requests", response_model=list[ExitRequestResponse])
+def get_exit_requests(
+    status: str = None,
+    db: Session = Depends(get_db),
+    admin_user = Depends(check_system_admin)
+):
+    """
+    Get all exit requests. Requires admin_user_id.
+    """
+    from models import ExitRequest
+    query = db.query(ExitRequest)
+    if status:
+        query = query.filter(ExitRequest.status == status)
+    return query.all()
 
 
 @router.post("/exit-requests/{exit_request_id}/process-assets")

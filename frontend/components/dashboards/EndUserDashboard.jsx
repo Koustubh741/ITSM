@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { Laptop, Ticket, RefreshCw, User, Briefcase, MapPin, Calendar, Building2, Cpu, X, CheckCircle, AlertCircle, Settings, Sparkles, ChevronUp, Smartphone } from 'lucide-react';
+import { Laptop, Ticket, RefreshCw, User, Briefcase, MapPin, Calendar, Building2, Cpu, X, CheckCircle, AlertCircle, Settings, Sparkles, ChevronUp, Smartphone, LogOut } from 'lucide-react';
 import { useRole } from '@/contexts/RoleContext';
 import { useAssetContext, ASSET_STATUS } from '@/contexts/AssetContext';
 import apiClient from '@/lib/apiClient';
@@ -99,6 +99,21 @@ export default function EndUserDashboard() {
                             <p className="text-xs opacity-90">
                                 {showSuccess === 'asset-success' ? 'Asset request submitted successfully.' : 'Support ticket raised successfully.'}
                             </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Offboarding Banner */}
+            {user?.status === 'EXITING' && (
+                <div className="bg-orange-500/10 border border-orange-500/20 backdrop-blur-md p-6 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 animate-in slide-in-from-top duration-500 shadow-xl shadow-orange-500/10 mb-6">
+                    <div className="flex items-center gap-4">
+                        <div className="w-14 h-14 rounded-2xl bg-orange-500/20 flex items-center justify-center text-orange-400 border border-orange-500/20 shadow-inner">
+                            <LogOut size={28} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-bold text-white">Active Offboarding Workflow</h3>
+                            <p className="text-orange-200/70 text-sm mt-0.5">Your exit process has been initiated. Please ensure all company assets are returned to IT.</p>
                         </div>
                     </div>
                 </div>

@@ -3,12 +3,20 @@ from models import User
 from schemas.user_schema import UserCreate, UserUpdate
 import uuid
 
-# Mock hashing for MVP - Replace with bcrypt in production
+from passlib.context import CryptContext
+
+# Password hashing configuration
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 def get_password_hash(password):
-    return password + "notreallyhashed"
+    return pwd_context.hash(password)
 
 def verify_password(plain_password, hashed_password):
-    return get_password_hash(plain_password) == hashed_password
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        # Fallback to plain text comparison for dev seeds if they are not hashed
+        return plain_password == hashed_password
 
 def get_user_by_email(db: Session, email: str):
     return db.query(User).filter(User.email == email).first()

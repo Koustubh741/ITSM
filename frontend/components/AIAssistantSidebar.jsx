@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Send, Bot, User, Sparkles } from 'lucide-react';
+import { initialMockAssets } from '@/data/mockAssets';
 
 export default function AIAssistantSidebar({ isOpen, onClose }) {
     const [messages, setMessages] = useState([
@@ -38,7 +39,6 @@ export default function AIAssistantSidebar({ isOpen, onClose }) {
 
             // Fallback to mock data if empty (ensures AI always works)
             if (assets.length === 0) {
-                const { initialMockAssets } = require('@/data/mockAssets');
                 assets = initialMockAssets;
             }
 
