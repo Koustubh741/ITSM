@@ -4,7 +4,7 @@ from jose import JWTError, jwt
 import os
 
 # Configuration from environment variables
-SECRET_KEY = os.getenv("SECRET_KEY", "your-very-secret-key-change-it-in-production")
+SECRET_KEY = os.getenv("SECRET_KEY", "k8f^x2Q!R%9B#uW6m@P7E$ZsL3yJdKc&N5TqA0HhF*V")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 24 hours
 

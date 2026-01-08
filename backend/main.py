@@ -1,9 +1,9 @@
-"""
-FastAPI application entry point
-"""
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
+from database import get_db
+from models import AuditLog, Asset
 import traceback
 from datetime import datetime
 from routers import upload, workflows
@@ -14,6 +14,11 @@ app = FastAPI(
     description="Asset Management API for ITSM Platform",
     version="1.0.0"
 )
+
+# Suppress favicon 404s
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return JSONResponse(content={})
 
 import os
 
@@ -78,6 +83,124 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.api_route("/api/v1/collect", methods=["GET", "POST"])
+async def collect_data(request: Request, db: Session = Depends(get_db)):
+    """
+    Collect data from external sources and route to appropriate tables.
+    Asset data (with serial_number) goes to asset.assets table.
+    All data is logged in system.audit_logs for audit trail.
+    """
+    if request.method == "POST":
+        try:
+            data = await request.json()
+        except:
+            data = {"error": "Invalid JSON"}
+    else:
+        data = dict(request.query_params)
+    
+    print(f"COLLECTED DATA ({request.method}): {data}")
+    
+    # Always log to audit trail
+    try:
+        audit_log = AuditLog(
+            entity_type="API",
+            entity_id="collect_endpoint",
+            action="DATA_COLLECT",
+            performed_by=f"API_REQUEST ({request.method})",
+            details=data
+        )
+        db.add(audit_log)
+        db.commit()
+    except Exception as e:
+        print(f"Error saving audit log: {e}")
+        db.rollback()
+    
+    # Check if this is asset data (must have serial_number)
+    if "serial_number" in data and isinstance(data, dict):
+        try:
+            # Extract and map fields from external data to Asset model
+            serial_number = data.get("serial_number")
+            hostname = data.get("hostname", "Unknown")
+            asset_metadata = data.get("asset_metadata", {})
+            hardware = data.get("hardware", {})
+            
+            # Build specifications JSON from hardware, os, network data
+            specifications = {
+                "hardware": hardware,
+                "os": data.get("os", {}),
+                "network": data.get("network", {})
+            }
+            
+            # Check for existing asset by serial_number
+            existing_asset = db.query(Asset).filter(
+                Asset.serial_number == serial_number
+            ).first()
+            
+            if existing_asset:
+                # Update existing asset
+                existing_asset.name = hostname
+                existing_asset.type = asset_metadata.get("type", existing_asset.type)
+                existing_asset.segment = asset_metadata.get("segment", existing_asset.segment)
+                existing_asset.location = asset_metadata.get("location", existing_asset.location)
+                existing_asset.specifications = specifications
+                existing_asset.vendor = hardware.get("manufacturer", existing_asset.vendor)
+                existing_asset.model = hardware.get("model", existing_asset.model)
+                
+                db.commit()
+                
+                return {
+                    "status": "success",
+                    "action": "updated",
+                    "asset_id": existing_asset.id,
+                    "serial_number": serial_number,
+                    "message": f"Asset '{hostname}' updated successfully"
+                }
+            else:
+                # Create new asset
+                new_asset = Asset(
+                    name=hostname,
+                    type=asset_metadata.get("type", "Unknown"),
+                    model=hardware.get("model", "Unknown"),
+                    vendor=hardware.get("manufacturer", "Unknown"),
+                    serial_number=serial_number,
+                    segment=asset_metadata.get("segment", "IT"),
+                    status="Active",
+                    location=asset_metadata.get("location"),
+                    specifications=specifications,
+                    cost=0.0
+                )
+                
+                db.add(new_asset)
+                db.commit()
+                
+                return {
+                    "status": "success",
+                    "action": "created",
+                    "asset_id": new_asset.id,
+                    "serial_number": serial_number,
+                    "message": f"Asset '{hostname}' created successfully"
+                }
+                
+        except Exception as e:
+            print(f"Error processing asset data: {e}")
+            import traceback
+            traceback.print_exc()
+            db.rollback()
+            
+            return {
+                "status": "error",
+                "message": f"Failed to process asset data: {str(e)}",
+                "logged": True
+            }
+    
+    # Non-asset data: just return success (already logged)
+    return {
+        "status": "success", 
+        "method": request.method,
+        "received": data,
+        "logged": True
+    }
 
 # Database health check endpoint
 @app.get("/health/db")
