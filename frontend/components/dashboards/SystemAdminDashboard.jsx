@@ -62,13 +62,13 @@ export default function SystemAdminDashboard() {
                 console.warn('No currentUser found in fetchPendingUsers');
                 return;
             }
-            const pending = await apiClient.getUsers({ status: 'PENDING', admin_user_id: currentUser.id });
+            const pending = await apiClient.getUsers({ status: 'PENDING' });
             console.log('Pending users fetched:', pending.length);
             setPendingUsers(pending);
-            const active = await apiClient.getUsers({ status: 'ACTIVE', admin_user_id: currentUser.id });
+            const active = await apiClient.getUsers({ status: 'ACTIVE' });
             setActiveUsers(active);
 
-            const exits = await apiClient.getExitRequests({ admin_user_id: currentUser.id });
+            const exits = await apiClient.getExitRequests();
             setExitRequests(exits);
         } catch (error) {
             console.error('Failed to fetch pending users:', error);
@@ -78,7 +78,7 @@ export default function SystemAdminDashboard() {
     const handleActivateUser = async (userId) => {
         try {
             if (!currentUser) return;
-            await apiClient.activateUser(userId, currentUser.id);
+            await apiClient.activateUser(userId);
             // Refresh list
             fetchPendingUsers();
         } catch (error) {
@@ -91,7 +91,7 @@ export default function SystemAdminDashboard() {
         if (!confirm('Are you sure you want to deny this access request?')) return;
         try {
             if (!currentUser) return;
-            await apiClient.denyUser(userId, currentUser.id);
+            await apiClient.denyUser(userId);
             // Refresh list
             fetchPendingUsers();
         } catch (error) {
@@ -104,7 +104,7 @@ export default function SystemAdminDashboard() {
         if (!confirm('Are you sure you want to deactivate this account directly? This skips the official exit process.')) return;
         try {
             if (!currentUser) return;
-            await apiClient.denyUser(userId, currentUser.id);
+            await apiClient.denyUser(userId);
             fetchPendingUsers();
         } catch (error) {
             console.error('Failed to deactivate user:', error);
@@ -116,11 +116,24 @@ export default function SystemAdminDashboard() {
         if (!confirm('Are you sure you want to initiate the exit process for this user? This will create an exit request and reclaim assets.')) return;
         try {
             if (!currentUser) return;
-            await apiClient.initiateExit(userId, currentUser.id);
+            await apiClient.initiateExit(userId);
             fetchPendingUsers();
         } catch (error) {
             console.error('Failed to initiate exit:', error);
             alert('Failed to initiate exit: ' + error.message);
+        }
+    }
+
+    const handleCompleteExit = async (requestId) => {
+        if (!confirm('Are you sure you want to finalize this exit? This will deactivate the user account permanently.')) return;
+        try {
+            if (!currentUser) return;
+            await apiClient.completeExitRequest(requestId);
+            fetchPendingUsers();
+            alert('Exit process completed successfully. User account has been deactivated.');
+        } catch (error) {
+            console.error('Failed to complete exit:', error);
+            alert('Failed to complete exit: ' + error.message);
         }
     }
 
@@ -619,8 +632,29 @@ export default function SystemAdminDashboard() {
                                 <h3 className="text-2xl font-bold text-white flex items-center gap-2">
                                     <LogOut className="text-orange-400" size={24} />
                                     Ongoing Exit Workflows
+                                    {exitRequests.filter(req => req.status === 'ASSETS_PROCESSED' || req.status === 'BYOD_PROCESSED').length > 0 && (
+                                        <span className="ml-3 px-3 py-1 bg-emerald-500/20 border border-emerald-500/30 rounded-full text-emerald-400 text-xs font-bold animate-pulse">
+                                            {exitRequests.filter(req => req.status === 'ASSETS_PROCESSED' || req.status === 'BYOD_PROCESSED').length} Ready for Completion
+                                        </span>
+                                    )}
                                 </h3>
                                 <p className="text-slate-400 text-sm mt-1">Users currently in the process of leaving the organization. Reclaim assets before finalizing.</p>
+                                
+                                {/* Notification Alert for Processed Assets */}
+                                {exitRequests.filter(req => req.status === 'ASSETS_PROCESSED' || req.status === 'BYOD_PROCESSED').length > 0 && (
+                                    <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-start gap-3">
+                                        <div className="p-2 bg-emerald-500/20 rounded-lg">
+                                            <CheckCircle className="text-emerald-400" size={20} />
+                                        </div>
+                                        <div className="flex-1">
+                                            <h4 className="text-emerald-400 font-bold text-sm">Assets Processed - Action Required</h4>
+                                            <p className="text-slate-300 text-xs mt-1">
+                                                The Asset Manager has completed asset reclamation for {exitRequests.filter(req => req.status === 'ASSETS_PROCESSED' || req.status === 'BYOD_PROCESSED').length} exit request(s). 
+                                                Please review and finalize the deactivation process below.
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
                                 
                                 <div className="mt-6 overflow-x-auto">
                                     <table className="w-full text-left">

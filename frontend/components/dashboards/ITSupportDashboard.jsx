@@ -996,7 +996,7 @@ export default function ITSupportDashboard() {
                                 <button 
                                     onClick={async () => {
                                         if (confirm(`Confirm MDM unenrollment and data wipe for BYOD devices belonging to ${req.user_id}?`)) {
-                                            await processExitByod(req.id, user?.id || 'it-manager');
+                                            await processExitByod(req.id);
                                         }
                                     }}
                                     className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20"

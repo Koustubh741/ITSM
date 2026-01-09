@@ -262,7 +262,7 @@ export default function InventoryManagerDashboard() {
                                             <button
                                                 onClick={async () => {
                                                     if (confirm(`Confirm receipt and QC of all company assets for user ${req.user_id}?`)) {
-                                                        await processExitAssets(req.id, user?.id || 'inventory-manager');
+                                                        await processExitAssets(req.id);
                                                     }
                                                 }}
                                                 className="bg-orange-600 hover:bg-orange-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-orange-500/10 transition-all"

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Trash2, ShieldAlert, HardDrive, CheckCircle, AlertTriangle, FileText, X, ShieldCheck, User } from 'lucide-react'
+import apiClient from '../lib/apiClient'
 
 // --- Helper: Action Modal ---
 const ActionModal = ({ isOpen, onClose, title, data, onConfirm, actionLabel, stepType }) => {
@@ -34,16 +35,12 @@ const ActionModal = ({ isOpen, onClose, title, data, onConfirm, actionLabel, ste
                         <div className="space-y-3">
                             <h4 className="text-sm font-semibold text-blue-400 uppercase tracking-wider">Validation Summary</h4>
                             <div className="flex justify-between text-sm py-2 border-b border-white/5">
-                                <span className="text-slate-400">Last Assigned User</span>
-                                <span className="text-slate-200">{data.last_user || 'Unknown'}</span>
+                                <span className="text-slate-400">Current Status</span>
+                                <span className="text-slate-200">{data.status}</span>
                             </div>
                             <div className="flex justify-between text-sm py-2 border-b border-white/5">
-                                <span className="text-slate-400">Last Activity Date</span>
-                                <span className="text-slate-200">{data.last_active || 'N/A'}</span>
-                            </div>
-                            <div className="flex justify-between text-sm py-2 border-b border-white/5">
-                                <span className="text-slate-400">Open Tickets</span>
-                                <span className="text-emerald-400 font-medium">None (Cleared)</span>
+                                <span className="text-slate-400">Last Assignment</span>
+                                <span className="text-slate-200">{data.assigned_to || 'None'}</span>
                             </div>
                         </div>
                     )}
@@ -58,10 +55,6 @@ const ActionModal = ({ isOpen, onClose, title, data, onConfirm, actionLabel, ste
                                 <span className="text-slate-400">Wipe Method</span>
                                 <span className="text-slate-200 font-mono">DoD 5220.22-M (3 Pass)</span>
                             </div>
-                            <div className="flex justify-between text-sm py-2 border-b border-white/5">
-                                <span className="text-slate-400">Executor</span>
-                                <span className="text-slate-200">System Admin</span>
-                            </div>
                         </div>
                     )}
 
@@ -73,10 +66,6 @@ const ActionModal = ({ isOpen, onClose, title, data, onConfirm, actionLabel, ste
                                     <p className="font-bold mb-1">Irreversible Action</p>
                                     This asset will be permanently marked as <strong>Retired</strong>. It will be removed from active inventory counts.
                                 </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-slate-400 justify-center">
-                                <input type="checkbox" id="confirm" className="rounded border-slate-600 bg-slate-800" />
-                                <label htmlFor="confirm">I confirm physical disposal is complete</label>
                             </div>
                         </div>
                     )}
@@ -106,18 +95,26 @@ const ActionModal = ({ isOpen, onClose, title, data, onConfirm, actionLabel, ste
 
 export default function Disposal() {
     const [loading, setLoading] = useState(true)
-
-    // Strict Mock Data for Disposal Queue
-    const [assets, setAssets] = useState([
-        { id: 91, name: 'Old Server XYZ', serial_number: 'SRV-OLD-001', disposal_status: 'Pending_Validation', type: 'Server', last_user: 'IT Ops', last_active: '2023-11-15' },
-        { id: 92, name: 'Retired Laptop', serial_number: 'LAP-RET-442', disposal_status: 'Ready_For_Wipe', type: 'Laptop', last_user: 'Sales Intern', last_active: '2024-01-10' },
-        { id: 93, name: 'Legacy Desktop', serial_number: 'DSK-LEG-789', disposal_status: 'Wiped', type: 'Desktop', last_user: 'Reception', last_active: '2023-12-20' },
-    ])
-
+    const [assets, setAssets] = useState([])
+    const [error, setError] = useState(null)
     const [modalConfig, setModalConfig] = useState(null)
 
+    const fetchQueue = async () => {
+        try {
+            setLoading(true);
+            setError(null);
+            const data = await apiClient.getDisposalQueue();
+            setAssets(data);
+        } catch (err) {
+            console.error("Failed to fetch disposal queue:", err);
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        setTimeout(() => setLoading(false), 500)
+        fetchQueue();
     }, [])
 
     const openActionModal = (asset, action) => {
@@ -143,47 +140,43 @@ export default function Disposal() {
         setModalConfig(config);
     }
 
-    const updateStatus = (id, newStatus) => {
-        setAssets(prev => prev.map(a => a.id === id ? { ...a, disposal_status: newStatus } : a));
-        setModalConfig(null);
-    }
+    const handleValidate = async (id) => {
+        try {
+            await apiClient.validateDisposal(id);
+            await fetchQueue();
+            setModalConfig(null);
+        } catch (err) {
+            alert("Validation failed: " + err.message);
+        }
+    };
 
-    const handleValidate = (id) => updateStatus(id, 'Ready_For_Wipe');
+    const handleWipe = async (id) => {
+        try {
+            await apiClient.recordWipe(id);
+            await fetchQueue();
+            setModalConfig(null);
+        } catch (err) {
+            alert("Wipe failed: " + err.message);
+        }
+    };
 
-    const handleWipe = (id) => updateStatus(id, 'Wiped');
-
-    const handleDispose = (id) => {
-        const asset = assets.find(a => a.id === id);
-        if (!asset) return;
-
-        // 1. Update Mock State
-        updateStatus(id, 'Disposed');
-
-        // 2. Persist 'Retired' status to LocalStorage (Global Impact)
-        const savedAssets = localStorage.getItem('assets');
-        const currentAssets = savedAssets ? JSON.parse(savedAssets) : [];
-
-        // Remove old instance if exists, add new Retired record
-        const filteredAssets = currentAssets.filter(a => a.id !== id);
-
-        const retiredAsset = {
-            id: id,
-            name: asset.name,
-            type: asset.type,
-            status: 'Retired', // CRITICAL: This hides it from active views
-            assigned_to: null,
-            serial_number: asset.serial_number,
-            location: 'Disposal Archive',
-            cost: 0,
-            purchase_date: asset.last_active
-        };
-
-        const updatedAssets = [...filteredAssets, retiredAsset];
-        localStorage.setItem('assets', JSON.stringify(updatedAssets));
+    const handleDispose = async (id) => {
+        try {
+            await apiClient.finalizeDisposal(id);
+            await fetchQueue();
+            setModalConfig(null);
+        } catch (err) {
+            alert("Disposal failed: " + err.message);
+        }
     };
 
 
-    if (loading) return <div className="p-8 text-white">Loading Disposal Queue...</div>
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+            <p>Loading Disposal Queue...</p>
+        </div>
+    )
 
     return (
         <div className="space-y-8 pb-20">
@@ -197,27 +190,50 @@ export default function Disposal() {
                 </Link>
             </div>
 
+            {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-6 text-center">
+                    <AlertTriangle className="mx-auto text-red-500 mb-2" size={32} />
+                    <h3 className="text-white font-bold text-lg">Failed to load data</h3>
+                    <p className="text-red-400/80 mb-4">{error}</p>
+                    <button onClick={fetchQueue} className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors">
+                        Try Again
+                    </button>
+                </div>
+            )}
+
+            {!error && assets.length === 0 && (
+                <div className="bg-slate-900/40 border border-white/5 rounded-2xl p-12 text-center">
+                    <div className="bg-white/5 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <CheckCircle className="text-slate-500" size={40} />
+                    </div>
+                    <h3 className="text-white font-bold text-xl mb-2">Queue is Empty</h3>
+                    <p className="text-slate-400 max-w-sm mx-auto">
+                        There are currently no assets marked for disposal. Assets appear here when their status is changed to 'Scrap'.
+                    </p>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {assets.map(asset => (
-                    <div key={asset.id} className={`glass-card p-6 border-l-4 transition-all duration-300 ${asset.disposal_status === 'Disposed' ? 'border-l-slate-600 opacity-60' :
-                            asset.disposal_status === 'Wiped' ? 'border-l-red-500' :
-                                asset.disposal_status === 'Ready_For_Wipe' ? 'border-l-yellow-500' : 'border-l-blue-500'
+                    <div key={asset.id} className={`glass-card p-6 border-l-4 transition-all duration-300 ${asset.disposal_status === 'RETIRED' ? 'border-l-slate-600 opacity-60' :
+                            asset.disposal_status === 'WIPED' ? 'border-l-red-500' :
+                                asset.disposal_status === 'WIPE_PENDING' ? 'border-l-yellow-500' : 'border-l-blue-500'
                         }`}>
                         <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h3 className="font-bold text-white text-lg">{asset.name}</h3>
                                 <p className="text-slate-400 text-sm font-mono">{asset.serial_number}</p>
                             </div>
-                            <div className={`p-2 rounded-lg ${asset.disposal_status === 'Disposed' ? 'bg-slate-800 text-slate-500' : 'bg-white/5 text-white'
+                            <div className={`p-2 rounded-lg ${asset.disposal_status === 'RETIRED' ? 'bg-slate-800 text-slate-500' : 'bg-white/5 text-white'
                                 }`}>
-                                {asset.disposal_status === 'Disposed' ? <CheckCircle size={20} /> : <Trash2 size={20} />}
+                                {asset.disposal_status === 'RETIRED' ? <CheckCircle size={20} /> : <Trash2 size={20} />}
                             </div>
                         </div>
 
                         <div className="mb-6 bg-black/20 rounded-lg p-3">
                             <div className="flex justify-between text-sm items-center">
                                 <span className="text-slate-500 text-xs uppercase font-bold">Status</span>
-                                <span className={`font-mono font-medium text-xs px-2 py-0.5 rounded ${asset.disposal_status === 'Disposed' ? 'bg-slate-700 text-slate-400' : 'bg-white/10 text-white'
+                                <span className={`font-mono font-medium text-xs px-2 py-0.5 rounded ${asset.disposal_status === 'RETIRED' ? 'bg-slate-700 text-slate-400' : 'bg-white/10 text-white'
                                     }`}>
                                     {asset.disposal_status.replace(/_/g, ' ')}
                                 </span>
@@ -225,7 +241,7 @@ export default function Disposal() {
                         </div>
 
                         <div className="grid grid-cols-1 gap-2">
-                            {asset.disposal_status === 'Pending_Validation' && (
+                            {asset.disposal_status === 'SCRAP_CANDIDATE' && (
                                 <button
                                     onClick={() => openActionModal(asset, 'validate')}
                                     className="btn w-full bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -234,7 +250,7 @@ export default function Disposal() {
                                 </button>
                             )}
 
-                            {asset.disposal_status === 'Ready_For_Wipe' && (
+                            {asset.disposal_status === 'WIPE_PENDING' && (
                                 <button
                                     onClick={() => openActionModal(asset, 'wipe')}
                                     className="btn w-full bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-400 border border-yellow-500/20 flex justify-center items-center py-2 rounded-lg text-sm font-medium transition-colors"
@@ -243,7 +259,7 @@ export default function Disposal() {
                                 </button>
                             )}
 
-                            {asset.disposal_status === 'Wiped' && (
+                            {asset.disposal_status === 'WIPED' && (
                                 <button
                                     onClick={() => openActionModal(asset, 'dispose')}
                                     className="btn w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 flex justify-center items-center py-2 rounded-lg text-sm font-medium transition-colors"
@@ -252,7 +268,7 @@ export default function Disposal() {
                                 </button>
                             )}
 
-                            {asset.disposal_status === 'Disposed' && (
+                            {asset.disposal_status === 'RETIRED' && (
                                 <div className="text-center py-2 text-slate-500 bg-white/5 rounded-lg text-sm flex items-center justify-center border border-white/5 cursor-not-allowed">
                                     <CheckCircle size={14} className="mr-2" /> Archived & Locked
                                 </div>

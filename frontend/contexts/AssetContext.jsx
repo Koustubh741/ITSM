@@ -169,10 +169,19 @@ export function AssetProvider({ children }) {
                 // 3) Load exit requests (only for relevant roles)
                 if (currentRole?.slug === 'ADMIN' || 
                     currentRole?.slug === 'ASSET_MANAGER' || 
-                    currentRole?.slug === 'IT_MANAGEMENT'
+                    currentRole?.slug === 'IT_MANAGEMENT' ||
+                    currentRole?.slug === 'ASSET_INVENTORY_MANAGER'
                 ) {
-                    const apiExitRequests = await apiClient.getExitRequests({ admin_user_id: user.id });
-                    setExitRequests(apiExitRequests);
+                    console.log("[AssetContext] Fetching exit requests for role:", currentRole?.slug);
+                    try {
+                        const apiExitRequests = await apiClient.getExitRequests();
+                        console.log("[AssetContext] Exit requests fetched:", apiExitRequests);
+                        setExitRequests(apiExitRequests);
+                    } catch (exitErr) {
+                        console.error("[AssetContext] Failed to fetch exit requests:", exitErr);
+                    }
+                } else {
+                    console.log("[AssetContext] Skipping exit requests for role:", currentRole?.slug);
                 }
 
                 if (typeof window !== 'undefined') localStorage.removeItem('enterprise_requests');
@@ -398,7 +407,7 @@ export function AssetProvider({ children }) {
         try {
             await apiClient.itRejectRequest(reqId, {
                 reviewer_id: reviewerId,
-                rejection_reason: reason
+                reason: reason // Changed from rejection_reason to reason to match backend schema
             });
 
             setRequests(prev => prev.map(req => {
@@ -802,9 +811,9 @@ export function AssetProvider({ children }) {
     };
 
     // --- EXIT WORKFLOW FUNCTIONS ---
-    const processExitAssets = async (requestId, managerId) => {
+    const processExitAssets = async (requestId) => {
         try {
-            await apiClient.processExitAssets(requestId, managerId);
+            await apiClient.processExitAssets(requestId);
             setExitRequests(prev => prev.map(req => 
                 req.id === requestId ? { ...req, status: 'ASSETS_PROCESSED' } : req
             ));
@@ -817,9 +826,9 @@ export function AssetProvider({ children }) {
         }
     };
 
-    const processExitByod = async (requestId, itManagerId) => {
+    const processExitByod = async (requestId) => {
         try {
-            await apiClient.processExitByod(requestId, itManagerId);
+            await apiClient.processExitByod(requestId);
             setExitRequests(prev => prev.map(req => 
                 req.id === requestId ? { ...req, status: 'BYOD_PROCESSED' } : req
             ));

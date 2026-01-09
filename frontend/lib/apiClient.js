@@ -348,14 +348,14 @@ class ApiClient {
         return this.request(`/auth/users?${queryString}`);
     }
 
-    async activateUser(userId, adminId) {
-        return this.request(`/auth/users/${userId}/activate?admin_user_id=${adminId}`, {
+    async activateUser(userId) {
+        return this.request(`/auth/users/${userId}/activate`, {
             method: 'POST'
         });
     }
 
-    async denyUser(userId, adminId) {
-        return this.request(`/auth/users/${userId}/disable?admin_user_id=${adminId}`, {
+    async denyUser(userId) {
+        return this.request(`/auth/users/${userId}/disable`, {
             method: 'POST'
         });
     }
@@ -377,26 +377,55 @@ class ApiClient {
         return this.request(`/auth/exit-requests?${queryString}`);
     }
 
-    async initiateExit(userId, adminId) {
-        return this.request(`/auth/users/${userId}/exit?admin_user_id=${adminId}`, {
+    async initiateExit(userId) {
+        return this.request(`/auth/users/${userId}/exit`, {
             method: 'POST'
         });
     }
 
-    async processExitAssets(exitRequestId, managerId) {
-        return this.request(`/auth/exit-requests/${exitRequestId}/process-assets?manager_id=${managerId}`, {
+    async processExitAssets(exitRequestId) {
+        return this.request(`/auth/exit-requests/${exitRequestId}/process-assets`, {
             method: 'POST'
         });
     }
 
-    async processExitByod(exitRequestId, itManagerId) {
-        return this.request(`/auth/exit-requests/${exitRequestId}/process-byod?it_manager_id=${itManagerId}`, {
+    async processExitByod(exitRequestId) {
+        return this.request(`/auth/exit-requests/${exitRequestId}/process-byod`, {
             method: 'POST'
         });
     }
 
-    async completeExitRequest(exitRequestId, adminId) {
-        return this.request(`/auth/exit-requests/${exitRequestId}/complete?admin_user_id=${adminId}`, {
+    async completeExitRequest(exitRequestId) {
+        return this.request(`/auth/exit-requests/${exitRequestId}/complete`, {
+            method: 'POST'
+        });
+    }
+
+    // Disposal
+    async getDisposalQueue() {
+        return this.request('/disposal/queue');
+    }
+
+    async initiateDisposal(assetId) {
+        return this.request(`/disposal/${assetId}/initiate`, {
+            method: 'POST'
+        });
+    }
+
+    async validateDisposal(assetId) {
+        return this.request(`/disposal/${assetId}/validate`, {
+            method: 'POST'
+        });
+    }
+
+    async recordWipe(assetId) {
+        return this.request(`/disposal/${assetId}/wipe`, {
+            method: 'POST'
+        });
+    }
+
+    async finalizeDisposal(assetId) {
+        return this.request(`/disposal/${assetId}/finalize`, {
             method: 'POST'
         });
     }
