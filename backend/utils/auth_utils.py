@@ -4,7 +4,7 @@ from jose import JWTError, jwt
 import os
 
 # Configuration from environment variables
-SECRET_KEY = os.getenv("SECRET_KEY", "k8f^x2Q!R%9B#uW6m@P7E$ZsL3yJdKc&N5TqA0HhF*V")
+SECRET_KEY = os.getenv("SECRET_KEY", "bc7Fz2VSGbGBPKb5lsLooQmSVY0f6rbYrfEtEWzP8L8")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 # 24 hours
 
@@ -31,3 +31,42 @@ def verify_token(token: str):
         return payload
     except JWTError:
         return None
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.orm import Session
+
+# OAuth2 scheme for token extraction
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    """
+    Dependency to get current user from JWT token.
+    Raises 401 if token is invalid or user not found.
+    """
+    from database import SessionLocal
+    from services import user_service
+    
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    payload = verify_token(token)
+    if payload is None:
+        raise credentials_exception
+    
+    user_id: str = payload.get("user_id")
+    if user_id is None:
+        raise credentials_exception
+    
+    # Create DB session
+    db = SessionLocal()
+    try:
+        user = user_service.get_user(db, user_id)
+        if user is None:
+            raise credentials_exception
+        return user
+    finally:
+        db.close()

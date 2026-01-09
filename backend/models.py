@@ -79,6 +79,22 @@ class AssetAssignment(Base):
     location = Column(String(255), nullable=True)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
+class AssetInventory(Base):
+    """
+    Asset Inventory tracking (items in stock)
+    """
+    __tablename__ = "asset_inventory"
+    __table_args__ = {"schema": "asset"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    asset_id = Column(String, nullable=False, unique=True, index=True) # One entry per asset while in stock
+    location = Column(String(255), nullable=True)
+    status = Column(String(50), default="Available") # Available, Reserved, Inspection
+    availability_flag = Column(Boolean, default=True) # True if available for allocation
+    last_checked_at = Column(DateTime(timezone=True), nullable=True)
+    stocked_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
 class User(Base):
     """
     User model for authentication and role management
@@ -278,3 +294,20 @@ class AuditLog(Base):
     performed_by = Column(String, nullable=True) # User ID or Name
     details = Column(JSON, nullable=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+class ApiToken(Base):
+    """
+    API Token model for external system authentication
+    """
+    __tablename__ = "api_tokens"
+    __table_args__ = {"schema": "system"}
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
+    token = Column(String(255), nullable=False, unique=True, index=True)
+    name = Column(String(255), nullable=False)  # Descriptive name (e.g., "RHEL Server 192.168.1.146")
+    created_by = Column(String, nullable=True)  # User ID who created the token
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=True)  # None = never expires
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+

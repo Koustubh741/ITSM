@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from schemas.user_schema import UserCreate, UserResponse, LoginRequest, LoginResponse
 from schemas.exit_schema import ExitRequestResponse
-from services import user_service
+from services import user_service, exit_service
 from utils import auth_utils
 from datetime import datetime
 
@@ -14,20 +14,18 @@ router = APIRouter(
 )
 
 def check_system_admin(
-    admin_user_id: str = Query(..., description="Admin user ID for authorization"),
+    current_user = Depends(auth_utils.get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Simple admin check for MVP - expects admin_user_id query parameter.
-    In production, this should verify JWT token and check role.
+    Verify user is SYSTEM_ADMIN or ADMIN via JWT token.
     """
-    admin_user = user_service.get_user(db, admin_user_id)
-    if not admin_user or admin_user.role != "ADMIN":
+    if current_user.role not in ["ADMIN", "SYSTEM_ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only ADMIN can perform this action"
+            detail="Only SYSTEM_ADMIN or ADMIN can perform this action"
         )
-    return admin_user
+    return current_user
 
 @router.get("/users", response_model=list[UserResponse])
 def get_users(
@@ -37,7 +35,7 @@ def get_users(
 ):
     """
     Get all users, optionally filtered by status.
-    Requires admin_user_id query parameter.
+    Validated via JWT token.
     """
     users = user_service.get_users(db, status=status)
     if users:
@@ -89,8 +87,7 @@ def activate_user(
 ):
     """
     Activate a user account. Only SYSTEM_ADMIN can perform this action.
-    Requires admin_user_id query parameter with admin user ID.
-    Example: POST /auth/users/{user_id}/activate?admin_user_id={admin_id}
+    Validated via JWT token.
     """
     activated_user = user_service.activate_user(db, user_id)
     if not activated_user:
@@ -114,59 +111,74 @@ def initiate_exit(
     - Sets user.status = EXITING.
     - Creates an exit.exit_requests record capturing asset & BYOD snapshots.
     """
-    from models import AssetAssignment, ByodDevice, ExitRequest
+    try:
+        from models import AssetAssignment, ByodDevice, ExitRequest
 
-    user = user_service.get_user(db, user_id)
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        print(f"DEBUG: Initiating exit for user {user_id} by admin {admin_user.id}")
 
-    # Update user status to EXITING
-    user.status = "EXITING"
+        user = user_service.get_user(db, user_id)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    # Collect current asset assignments and BYOD devices
-    assignments = (
-        db.query(AssetAssignment)
-        .filter(AssetAssignment.user_id == user_id)
-        .all()
-    )
-    byod_devices = (
-        db.query(ByodDevice)
-        .filter(ByodDevice.owner_id == user_id)
-        .all()
-    )
+        # Update user status to EXITING
+        user.status = "EXITING"
 
-    assets_snapshot = [
-        {
-            "asset_id": a.asset_id,
-            "user_id": a.user_id,
-            "location": a.location,
-            "assigned_at": a.assigned_at.isoformat() if a.assigned_at else None,
-        }
-        for a in assignments
-    ]
+        # Collect current asset assignments
+        assignments = (
+            db.query(AssetAssignment)
+            .filter(AssetAssignment.user_id == user_id)
+            .all()
+        )
+        print(f"DEBUG: Found {len(assignments)} assets")
+        
+        byod_devices = (
+            db.query(ByodDevice)
+            .filter(ByodDevice.owner_id == user_id)
+            .all()
+        )
+        print(f"DEBUG: Found {len(byod_devices)} byod devices")
 
-    byod_snapshot = [
-        {
-            "device_id": d.id,
-            "device_model": d.device_model,
-            "os_version": d.os_version,
-            "serial_number": d.serial_number,
-            "compliance_status": d.compliance_status,
-        }
-        for d in byod_devices
-    ]
+        assets_snapshot = []
+        for a in assignments:
+            # Handle potential None for assigned_at
+            assigned_at_str = None
+            if hasattr(a, 'assigned_at') and a.assigned_at:
+                assigned_at_str = a.assigned_at.isoformat()
+            
+            assets_snapshot.append({
+                "asset_id": str(a.asset_id),
+                "user_id": str(a.user_id),
+                "location": a.location,
+                "assigned_at": assigned_at_str,
+            })
 
-    exit_request = ExitRequest(
-        user_id=user_id,
-        status="OPEN",
-        assets_snapshot=assets_snapshot,
-        byod_snapshot=byod_snapshot,
-    )
-    db.add(exit_request)
-    db.commit()
-    db.refresh(user)
+        byod_snapshot = [
+            {
+                "device_id": str(d.id),
+                "device_model": d.device_model,
+                "os_version": d.os_version,
+                "serial_number": d.serial_number,
+                "compliance_status": d.compliance_status,
+            }
+            for d in byod_devices
+        ]
 
-    return user
+        exit_request = ExitRequest(
+            user_id=user_id,
+            status="OPEN",
+            assets_snapshot=assets_snapshot,
+            byod_snapshot=byod_snapshot,
+        )
+        db.add(exit_request)
+        db.commit()
+        db.refresh(user)
+
+        return user
+    except Exception as e:
+        print(f"ERROR in initiate_exit: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 
 @router.post("/users/{user_id}/disable", response_model=UserResponse)
@@ -202,24 +214,40 @@ def verify_asset_inventory_manager_exit(
     manager = user_service.get_user(db, manager_id)
     if not manager:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if manager.role != "ASSET_INVENTORY_MANAGER":
+    allowed_roles = ["ASSET_INVENTORY_MANAGER", "ASSET_MANAGER", "SYSTEM_ADMIN", "ADMIN", "IT_MANAGEMENT"]
+    if manager.role not in allowed_roles:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only ASSET_INVENTORY_MANAGER can process asset returns"
+            detail=f"Only Asset Managers or Admins can process asset returns (Current role: {manager.role})"
         )
     if manager.status != "ACTIVE":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Manager account is not active")
     return manager
 
 
+def check_exit_access(
+    current_user = Depends(auth_utils.get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Allow access to System Admin, Asset Manager, and IT Management via JWT token.
+    """
+    allowed_roles = ["ADMIN", "SYSTEM_ADMIN", "ASSET_INVENTORY_MANAGER", "ASSET_MANAGER", "IT_MANAGEMENT"]
+    if current_user.role not in allowed_roles:
+         raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Role {current_user.role} not authorized to view exit requests"
+        )
+    return current_user
+
 @router.get("/exit-requests", response_model=list[ExitRequestResponse])
 def get_exit_requests(
     status: str = None,
     db: Session = Depends(get_db),
-    admin_user = Depends(check_system_admin)
+    admin_user = Depends(check_exit_access)
 ):
     """
-    Get all exit requests. Requires admin_user_id.
+    Get all exit requests. Validated via JWT token.
     """
     from models import ExitRequest
     query = db.query(ExitRequest)
@@ -231,24 +259,24 @@ def get_exit_requests(
 @router.post("/exit-requests/{exit_request_id}/process-assets")
 def process_exit_assets(
     exit_request_id: str,
-    manager_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    manager = Depends(check_exit_access)
 ):
     """
     Process company-owned asset returns for exiting user.
     
     Rules:
-    - Only ASSET_INVENTORY_MANAGER can call
+    - Only ASSET_MANAGER, ASSET_INVENTORY_MANAGER, or ADMIN can call (via JWT)
     - Exit request must be OPEN or ASSETS_PROCESSED
-    
-    Actions:
-    - Return all company-owned assets
-    - Perform QC, secure data wipe
-    - Update asset status (IN STOCK / REPAIR / SCRAP)
-    - Update exit request status to ASSETS_PROCESSED
     """
-    manager = verify_asset_inventory_manager_exit(manager_id, db)
-    
+    # Verify manager role for this specific action
+    allowed_roles = ["ASSET_INVENTORY_MANAGER", "ASSET_MANAGER", "SYSTEM_ADMIN", "ADMIN"]
+    if manager.role not in allowed_roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Only Asset Managers or Admins can process asset returns (Current role: {manager.role})"
+        )
+
     from models import ExitRequest, AssetAssignment, Asset
     
     exit_request = db.query(ExitRequest).filter(ExitRequest.id == exit_request_id).first()
@@ -294,35 +322,23 @@ def process_exit_assets(
 @router.post("/exit-requests/{exit_request_id}/process-byod")
 def process_exit_byod(
     exit_request_id: str,
-    it_manager_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    it_manager = Depends(check_exit_access)
 ):
     """
     Process BYOD device de-registration for exiting user.
     
     Rules:
-    - Only IT_MANAGEMENT can call
+    - Only IT_MANAGEMENT or ADMIN can call (via JWT)
     - Exit request must be OPEN or BYOD_PROCESSED
-    
-    Actions:
-    - De-register BYOD devices
-    - Unenroll from MDM
-    - Revoke all access
-    - Update exit request status to BYOD_PROCESSED
     """
-    from models import ExitRequest, ByodDevice
-    
-    # Verify IT management
-    it_manager = user_service.get_user(db, it_manager_id)
-    if not it_manager:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if it_manager.role != "IT_MANAGEMENT":
+    if it_manager.role not in ["IT_MANAGEMENT", "SYSTEM_ADMIN", "ADMIN"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only IT_MANAGEMENT can process BYOD de-registration"
+            detail="Only IT_MANAGEMENT or Admins can process BYOD de-registration"
         )
-    if it_manager.status != "ACTIVE":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IT manager account is not active")
+    
+    from models import ExitRequest, ByodDevice
     
     exit_request = db.query(ExitRequest).filter(ExitRequest.id == exit_request_id).first()
     if not exit_request:
@@ -364,7 +380,6 @@ def process_exit_byod(
 @router.post("/exit-requests/{exit_request_id}/complete")
 def complete_exit_request(
     exit_request_id: str,
-    admin_user_id: str,
     db: Session = Depends(get_db),
     admin_user = Depends(check_system_admin)
 ):
@@ -372,12 +387,8 @@ def complete_exit_request(
     Complete exit workflow and disable user account.
     
     Rules:
-    - Only SYSTEM_ADMIN can call
+    - Only SYSTEM_ADMIN can call (via JWT)
     - Exit request must be ASSETS_PROCESSED and BYOD_PROCESSED (or at least one completed)
-    
-    Actions:
-    - Mark exit request as COMPLETED
-    - Disable user account (user.status = DISABLED)
     """
     from models import ExitRequest
     
@@ -385,14 +396,22 @@ def complete_exit_request(
     if not exit_request:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Exit request not found")
     
-    # Check if assets and BYOD are processed (or at least one)
-    if exit_request.status not in ["ASSETS_PROCESSED", "BYOD_PROCESSED"]:
-        # Allow completion if at least one is processed (for cases where user has only assets or only BYOD)
-        if exit_request.status == "OPEN":
+    # Check if assets and BYOD are processed
+    if exit_request.status == "OPEN":
+        has_assets = bool(exit_request.assets_snapshot and len(exit_request.assets_snapshot) > 0)
+        has_byod = bool(exit_request.byod_snapshot and len(exit_request.byod_snapshot) > 0)
+        
+        if has_assets or has_byod:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Cannot complete exit request. Assets and/or BYOD devices must be processed first."
             )
+    elif exit_request.status == "COMPLETED":
+        return {
+            "status": "success",
+            "message": "Exit request is already completed",
+            "exit_request_status": "COMPLETED"
+        }
     
     # Mark exit request as completed
     exit_request.status = "COMPLETED"
@@ -411,3 +430,27 @@ def complete_exit_request(
         "exit_request_status": exit_request.status,
         "user_status": user.status if user else "N/A"
     }
+@router.post("/users/{user_id}/finalize-exit")
+def finalize_user_exit(
+    user_id: str,
+    db: Session = Depends(get_db),
+    admin_user = Depends(check_system_admin)
+):
+    """
+    Atomic exit processing: Reintegrates assets and deactivates user.
+    Returns a summary of processed items.
+    """
+    try:
+        # We can optionally pass QC results here if the frontend provides them
+        # For now, we'll use defaults as defined in the service
+        summary = exit_service.handle_user_exit(db, user_id, actor_id=admin_user.id)
+        return {
+            "status": "success",
+            "message": "User exit finalized and assets reintegrated",
+            "summary": summary
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )

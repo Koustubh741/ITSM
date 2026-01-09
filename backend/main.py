@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -6,7 +6,7 @@ from database import get_db
 from models import AuditLog, Asset
 import traceback
 from datetime import datetime
-from routers import upload, workflows
+from routers import upload, workflows, disposal
 
 # Create FastAPI app instance
 app = FastAPI(
@@ -68,6 +68,7 @@ async def debug_exception_handler(request: Request, exc: Exception):
 # Register routers
 app.include_router(upload.router)
 app.include_router(workflows.router)
+app.include_router(disposal.router)
 
 # Root endpoint
 @app.get("/")
@@ -84,12 +85,34 @@ async def root():
 async def health_check():
     return {"status": "healthy"}
 
+from fastapi import Header
+
+def verify_api_token(x_api_token: str = Header(..., alias="X-API-Token", description="API Token for authentication")):
+    """
+    Verify API token for external data collection.
+    Raises 401 if token is invalid.
+    """
+    from utils.api_token_utils import validate_api_token
+    
+    if not validate_api_token(x_api_token):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired API token"
+        )
+    return x_api_token
+
 @app.api_route("/api/v1/collect", methods=["GET", "POST"])
-async def collect_data(request: Request, db: Session = Depends(get_db)):
+async def collect_data(
+    request: Request, 
+    db: Session = Depends(get_db),
+    token: str = Depends(verify_api_token)
+):
     """
     Collect data from external sources and route to appropriate tables.
     Asset data (with serial_number) goes to asset.assets table.
     All data is logged in system.audit_logs for audit trail.
+    
+    Requires X-API-Token header for authentication.
     """
     if request.method == "POST":
         try:

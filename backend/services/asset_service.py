@@ -7,7 +7,7 @@ from typing import List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_
 from database import SessionLocal
-from models import Asset, ByodDevice, User
+from models import Asset, ByodDevice, User, AssetAssignment, AssetInventory
 from schemas.asset_schema import AssetCreate, AssetUpdate, AssetResponse
 
 
@@ -110,6 +110,18 @@ def create_asset(asset: AssetCreate) -> AssetResponse:
         )
         
         db.add(db_asset)
+        
+        # Inventory Logic for new assets
+        if db_asset.status == "In Stock":
+            inventory_item = AssetInventory(
+                id=str(uuid.uuid4()),
+                asset_id=db_asset.id,
+                location=db_asset.location,
+                status="Available",
+                stocked_at=datetime.now()
+            )
+            db.add(inventory_item)
+            
         db.commit()
         db.refresh(db_asset)
         
@@ -135,8 +147,32 @@ def update_asset(asset_id: str, asset_update: AssetUpdate) -> Optional[AssetResp
         
         # Update only provided fields
         update_data = asset_update.model_dump(exclude_unset=True)
+        
+        # Track status change for Inventory management
+        previous_status = db_asset.status
+        new_status = update_data.get('status')
+        
         for field, value in update_data.items():
             setattr(db_asset, field, value)
+            
+        # Inventory Management Logic
+        if new_status and new_status != previous_status:
+            # 1. Entering Stock
+            if new_status == "In Stock":
+                exists = db.query(AssetInventory).filter(AssetInventory.asset_id == asset_id).first()
+                if not exists:
+                    inventory_item = AssetInventory(
+                        id=str(uuid.uuid4()),
+                        asset_id=asset_id,
+                        location=db_asset.location,
+                        status="Available",
+                        stocked_at=datetime.now()
+                    )
+                    db.add(inventory_item)
+            
+            # 2. Leaving Stock (assigned, retired, repair, etc.)
+            elif previous_status == "In Stock":
+                db.query(AssetInventory).filter(AssetInventory.asset_id == asset_id).delete()
         
         db.commit()
         db.refresh(db_asset)
@@ -152,9 +188,10 @@ def update_asset(asset_id: str, asset_update: AssetUpdate) -> Optional[AssetResp
 
 def assign_asset(asset_id: str, user: str, location: str, assign_date: date) -> Optional[AssetResponse]:
     """
-    Assign an asset to a user
+    Assign an asset to a user and record in assignment history
     """
-    return update_asset(
+    # 1. Update the Asset record
+    updated_asset = update_asset(
         asset_id,
         AssetUpdate(
             assigned_to=user,
@@ -163,6 +200,51 @@ def assign_asset(asset_id: str, user: str, location: str, assign_date: date) -> 
             status="Active"
         )
     )
+    
+    # 2. Create Assignment History Record
+    if updated_asset:
+        db = SessionLocal()
+        try:
+            # Resolve 'user' string (Name or ID) to a User object
+            user_obj = None
+            
+            # Try as ID
+            try:
+                if len(str(user)) in [32, 36]:
+                    user_obj = db.query(User).filter(User.id == user).first()
+            except:
+                pass
+                
+            # Try as Name
+            if not user_obj:
+                user_obj = db.query(User).filter(func.lower(User.full_name) == func.lower(user)).first()
+            
+            # If User found, create assignment record
+            if user_obj:
+                 # Check if active assignment already exists to avoid duplicates
+                exists = db.query(AssetAssignment).filter(
+                    AssetAssignment.asset_id == asset_id,
+                    AssetAssignment.user_id == user_obj.id
+                ).first()
+                
+                if not exists:
+                    assignment = AssetAssignment(
+                        asset_id=asset_id,
+                        user_id=user_obj.id,
+                        assigned_by="System", 
+                        location=location,
+                        assigned_at=assign_date or datetime.now()
+                    )
+                    db.add(assignment)
+                    db.commit()
+            
+        except Exception as e:
+            print(f"Error creating assignment history: {e}")
+            # Don't fail the request if history creation fails
+        finally:
+            db.close()
+            
+    return updated_asset
 
 
 def get_asset_stats():
