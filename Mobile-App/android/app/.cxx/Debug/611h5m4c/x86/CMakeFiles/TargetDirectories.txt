@@ -1,0 +1,15 @@
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/CMakeFiles/appmodules.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/CMakeFiles/rebuild_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnreanimated_autolinked_build/CMakeFiles/react_codegen_rnreanimated.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnreanimated_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnreanimated_autolinked_build/CMakeFiles/rebuild_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/safeareacontext_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/safeareacontext_autolinked_build/CMakeFiles/rebuild_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnsvg_autolinked_build/CMakeFiles/react_codegen_rnsvg.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnsvg_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnsvg_autolinked_build/CMakeFiles/rebuild_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnworklets_autolinked_build/CMakeFiles/react_codegen_rnworklets.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnworklets_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Desktop/Itsm/android/app/.cxx/Debug/611h5m4c/x86/rnworklets_autolinked_build/CMakeFiles/rebuild_cache.dir
