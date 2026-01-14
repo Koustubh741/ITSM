@@ -68,7 +68,14 @@ export default function AllTicketsPage() {
                         </thead>
                         <tbody className="divide-y divide-white/5">
                             {tickets
-                                .filter(t => filterStatus === 'All' || t.status === filterStatus)
+                                .filter(t => {
+                                    if (filterStatus === 'All') return true;
+                                    const s = t.status?.toUpperCase();
+                                    const fs = filterStatus.toUpperCase();
+                                    if (fs === 'OPEN') return s === 'OPEN' || s === 'IN_PROGRESS';
+                                    if (fs === 'CLOSED') return s === 'CLOSED' || s === 'RESOLVED';
+                                    return s === fs;
+                                })
                                 .map(t => (
                                     <tr key={t.id} className="hover:bg-white/5 transition-colors">
                                         <td className="px-6 py-4 font-mono text-slate-400">{t.id}</td>

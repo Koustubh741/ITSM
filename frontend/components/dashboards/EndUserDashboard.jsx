@@ -1,4 +1,3 @@
-
 import { useState } from 'react';
 import { Laptop, Ticket, RefreshCw, User, Briefcase, MapPin, Calendar, Building2, Cpu, X, CheckCircle, AlertCircle, Settings, Sparkles, ChevronUp, Smartphone, LogOut } from 'lucide-react';
 import { useRole } from '@/contexts/RoleContext';
@@ -74,12 +73,18 @@ export default function EndUserDashboard() {
         domain: user?.domain || "General"
     };
 
-    // Filter assets assigned to current user
-    const assignedAssets = assets.filter(a => {
-        const matches = (a.assigned_to?.toLowerCase() === (user?.name || 'Alex Johnson').toLowerCase()) &&
-                        (a.status === ASSET_STATUS.IN_USE || a.status === 'Active');
-        return matches;
-    });
+    // Filter assets assigned to current user and sort by assignment_date descending
+    const assignedAssets = assets
+        .filter(a => {
+            const matches = (a.assigned_to?.toLowerCase() === (user?.name || 'Alex Johnson').toLowerCase()) &&
+                            (a.status === ASSET_STATUS.IN_USE || a.status === 'Active');
+            return matches;
+        })
+        .sort((a, b) => {
+            const dateA = a.assignment_date ? new Date(a.assignment_date) : new Date(0);
+            const dateB = b.assignment_date ? new Date(b.assignment_date) : new Date(0);
+            return dateB - dateA; // Descending: latest first
+        });
 
     console.log('--- DASHBOARD ASSET DEBUG ---');
     console.log('CUrrent User Name:', user?.name);

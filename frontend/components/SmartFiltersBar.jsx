@@ -156,6 +156,21 @@ export default function SmartFiltersBar({ onFilterChange, onSaveView, className 
                             <option value="Expired">Expired</option>
                         </select>
                     </div>
+
+                    <div className="space-y-1">
+                        <label className="text-xs font-medium text-slate-400 flex items-center space-x-2">
+                            <User size={12} /> <span>Assignment</span>
+                        </label>
+                        <select
+                            value={filters.assignment || 'All'}
+                            onChange={(e) => handleChange('assignment', e.target.value)}
+                            className="w-full bg-slate-950 border border-white/10 rounded-lg py-2 px-3 text-sm text-slate-300 focus:ring-2 focus:ring-blue-500/50"
+                        >
+                            <option value="All">All Assets</option>
+                            <option value="Assigned">Assigned Only</option>
+                            <option value="Unassigned">Unassigned Only</option>
+                        </select>
+                    </div>
                 </div>
             )}
         </div>

@@ -94,11 +94,19 @@ export default function SmartSearchPage() {
             });
         }
 
+        if (filters.assignment && filters.assignment !== 'All') {
+            if (filters.assignment === 'Unassigned') {
+                result = result.filter(a => !a.assigned_to || a.assigned_to === 'Unassigned' || a.assigned_to === '');
+            } else if (filters.assignment === 'Assigned') {
+                result = result.filter(a => a.assigned_to && a.assigned_to !== 'Unassigned' && a.assigned_to !== '');
+            }
+        }
+
         setFilteredAssets(result);
     };
 
-    const handleSaveView = (currentFilters) => {
-        // Just open the drawer for now, passing filters logic would be in the drawer component usually
+    const handleSaveView = (filters) => {
+        setCurrentFilters(filters);
         setIsSavedViewOpen(true);
     };
 
@@ -142,8 +150,9 @@ export default function SmartSearchPage() {
             <SavedViewsDrawer
                 isOpen={isSavedViewOpen}
                 onClose={() => setIsSavedViewOpen(false)}
-                currentFilters={{}}
+                currentFilters={currentFilters}
                 onLoadView={(filters) => {
+                    setCurrentFilters(filters);
                     handleFilterChange(filters);
                 }}
             />

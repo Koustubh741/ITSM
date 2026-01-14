@@ -55,7 +55,14 @@ export default function AssetDetail() {
                     <h2 className="text-3xl font-bold text-white tracking-tight">{asset.name}</h2>
                     <p className="text-slate-400 font-mono text-sm">{asset.serial_number}</p>
                 </div>
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center space-x-3">
+                    <Link
+                        href={`/assets/${asset.id}/cmdb`}
+                        className="flex items-center space-x-2 px-4 py-1.5 rounded-full text-sm font-semibold bg-blue-500/10 text-blue-400 ring-1 ring-inset ring-blue-500/20 hover:bg-blue-500/20 transition-all"
+                    >
+                        <Activity size={16} />
+                        <span>View CMDB</span>
+                    </Link>
                     <span className={`px-4 py-1.5 rounded-full text-sm font-semibold ring-1 ring-inset ${asset.status === 'In Use' ? 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20' :
                         asset.status === 'In Stock' ? 'bg-blue-500/10 text-blue-400 ring-blue-500/20' :
                             'bg-slate-500/10 text-slate-400 ring-slate-500/20'
@@ -80,7 +87,7 @@ export default function AssetDetail() {
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">Vendor</p>
-                                <p className="font-medium text-slate-100 uppercase">{asset.name.split(' ')[0]}</p>
+                                <p className="font-medium text-slate-100 uppercase">{asset.vendor || "Unknown"}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">Asset ID</p>
@@ -92,19 +99,19 @@ export default function AssetDetail() {
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">Processor</p>
-                                <p className="font-medium text-slate-100">{asset.specifications?.Processor || (asset.segment === 'IT' ? 'Intel Core i7 vPro' : 'N/A')}</p>
+                                <p className="font-medium text-slate-100">{asset.specifications?.Processor || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">RAM</p>
-                                <p className="font-medium text-slate-100">{asset.specifications?.RAM || (asset.segment === 'IT' ? '32GB DDR4' : 'N/A')}</p>
+                                <p className="font-medium text-slate-100">{asset.specifications?.RAM || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">Storage</p>
-                                <p className="font-medium text-slate-100">{asset.specifications?.Storage || (asset.segment === 'IT' ? '1TB NVMe SSD' : 'N/A')}</p>
+                                <p className="font-medium text-slate-100">{asset.specifications?.Storage || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">OS</p>
-                                <p className="font-medium text-slate-100">{asset.specifications?.OS || (asset.segment === 'IT' ? 'Windows 11 Ent' : 'N/A')}</p>
+                                <p className="font-medium text-slate-100">{asset.specifications?.OS || 'N/A'}</p>
                             </div>
                             <div>
                                 <p className="text-sm text-slate-400 mb-1">Condition</p>

@@ -46,13 +46,16 @@ export function AssetProvider({ children }) {
     const [error, setError] = useState(null);
 
     // --- Persistence & API Integration ---
-    const deriveOwnerRole = (status, assetType) => {
+    const deriveOwnerRole = (status, assetType, procurementStage) => {
         switch (status) {
             case REQUEST_STATUS.REQUESTED: return OWNER_ROLE.MANAGER;
             case REQUEST_STATUS.MANAGER_APPROVED: return OWNER_ROLE.IT_MANAGEMENT;
             case REQUEST_STATUS.IT_APPROVED: 
                 return assetType === 'BYOD' ? OWNER_ROLE.IT_MANAGEMENT : OWNER_ROLE.ASSET_INVENTORY_MANAGER;
-            case REQUEST_STATUS.PROCUREMENT_REQUIRED: return OWNER_ROLE.PROCUREMENT;
+            case REQUEST_STATUS.PROCUREMENT_REQUIRED:
+                if (procurementStage === 'PO_CREATED' || procurementStage === 'PO_UPLOADED') return OWNER_ROLE.FINANCE;
+                if (procurementStage === 'FINANCE_APPROVED') return OWNER_ROLE.PROCUREMENT; // Back to procurement for delivery
+                return OWNER_ROLE.PROCUREMENT; // Default to procurement for initial PO creation
             case 'PROCUREMENT_APPROVED': return OWNER_ROLE.PROCUREMENT;
             case 'QC_PENDING': return OWNER_ROLE.ASSET_INVENTORY_MANAGER; 
             case REQUEST_STATUS.FULFILLED: return OWNER_ROLE.END_USER;
@@ -130,6 +133,8 @@ export function AssetProvider({ children }) {
                     if (rawStatus === 'IN_USE') status = 'FULFILLED';
                     if (rawStatus === 'MANAGER_REJECTED' || rawStatus === 'IT_REJECTED' || rawStatus === 'PROCUREMENT_REJECTED' || rawStatus === 'USER_REJECTED') status = 'REJECTED';
 
+                    const procurementStage = r.procurement_finance_status === 'APPROVED' ? 'FINANCE_APPROVED' : (r.procurement_finance_status || 'AWAITING_DECISION');
+                    
                     return {
                         ...r,
                         status: status,
@@ -139,8 +144,8 @@ export function AssetProvider({ children }) {
                             name: r.requester_name || r.requester_id || 'Employee',
                             email: r.requester_email || ''
                         },
-                        procurementStage: r.procurement_finance_status === 'APPROVED' ? 'FINANCE_APPROVED' : (r.procurement_finance_status || 'AWAITING_DECISION'),
-                        currentOwnerRole: deriveOwnerRole(status, r.asset_type || r.type || 'Standard'),
+                        procurementStage: procurementStage,
+                        currentOwnerRole: deriveOwnerRole(status, r.asset_type || r.type || 'Standard', procurementStage),
                         createdAt: r.created_at || r.requested_date
                     };
                 });
@@ -606,6 +611,25 @@ export function AssetProvider({ children }) {
     };
 
 
+    // 8.5. Procurement - Upload PO (Automated Extraction)
+    const procurementUploadPO = async (reqId, file) => {
+        try {
+            console.log(`[Procurement] Uploading PO for request ${reqId}...`);
+            const response = await apiClient.uploadPO(reqId, user?.id || 'procurement', file);
+            console.log(`[Procurement] PO Upload Response:`, response); // contains extracted details
+
+            // Refresh data to reflect status changes
+            loadData();
+            
+            return response;
+
+        } catch (error) {
+            console.error('[Procurement] ❌ PO Upload Failed:', error);
+            alert(`PO Upload Failed: ${error.message}`);
+            throw error;
+        }
+    };
+
     const procurementReject = async (reqId, reason, procurementOfficer) => {
         try {
             // Call backend API to persist the rejection
@@ -890,6 +914,7 @@ export function AssetProvider({ children }) {
             procurementCreatePO,
             procurementApprove,
             procurementReject,
+            procurementUploadPO,
             financeApprove,
             financeReject,
             procurementConfirmDelivery,

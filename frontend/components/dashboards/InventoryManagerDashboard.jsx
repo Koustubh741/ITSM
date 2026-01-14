@@ -199,7 +199,7 @@ export default function InventoryManagerDashboard() {
                                         <td className="p-3 text-right">
                                             <button
                                                 onClick={async () => {
-                                                    const assetId = prompt(`Enter asset ID to allocate for ${req.assetType}:`, "AST-" + Math.floor(Math.random() * 1000));
+                                                    const assetId = prompt(`Enter asset ID to allocate for ${req.assetType}:`, req.assetId || ("AST-" + Math.floor(Math.random() * 1000)));
                                                     if (assetId) await inventoryAllocateDelivered(req.id, assetId, user.name || 'Inventory Manager');
                                                 }}
                                                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-emerald-500/10 transition-all flex items-center gap-2 ml-auto"

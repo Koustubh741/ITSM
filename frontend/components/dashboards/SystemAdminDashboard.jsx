@@ -667,34 +667,59 @@ export default function SystemAdminDashboard() {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-white/5">
-                                            {exitRequests.map((req) => (
-                                                <tr key={req.id} className="group hover:bg-white/[0.02] transition-colors">
-                                                    <td className="py-4 font-mono text-xs text-slate-300">{req.user_id}</td>
-                                                    <td className="py-4">
-                                                        <span className={`px-2 py-1 rounded text-[10px] font-bold ${
-                                                            req.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-orange-500/10 text-orange-400'
-                                                        }`}>
-                                                            {req.status}
-                                                        </span>
-                                                    </td>
-                                                    <td className="py-4 text-sm text-slate-400">
-                                                        {req.assets_snapshot?.length || 0} Company • {req.byod_snapshot?.length || 0} BYOD
-                                                    </td>
-                                                    <td className="py-4 text-right">
-                                                        <button
-                                                            onClick={() => handleCompleteExit(req.id)}
-                                                            disabled={req.status === 'COMPLETED'}
-                                                            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
-                                                                req.status === 'COMPLETED' 
-                                                                ? 'bg-slate-800 text-slate-600 cursor-not-allowed' 
-                                                                : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                                                            }`}
-                                                        >
-                                                            Finalize Deactivation
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {exitRequests.map((req) => {
+                                                const hasPendingAssets = (req.assets_snapshot?.length > 0) && (req.status === 'OPEN' || req.status === 'BYOD_PROCESSED');
+                                                const hasPendingByod = (req.byod_snapshot?.length > 0) && (req.status === 'OPEN' || req.status === 'ASSETS_PROCESSED');
+                                                const isReady = req.status === 'READY_FOR_COMPLETION' || 
+                                                               (req.status === 'ASSETS_PROCESSED' && (req.byod_snapshot?.length || 0) === 0) ||
+                                                               (req.status === 'BYOD_PROCESSED' && (req.assets_snapshot?.length || 0) === 0) ||
+                                                               (req.status === 'OPEN' && (req.assets_snapshot?.length || 0) === 0 && (req.byod_snapshot?.length || 0) === 0);
+
+                                                return (
+                                                    <tr key={req.id} className="group hover:bg-white/[0.02] transition-colors">
+                                                        <td className="py-4 font-mono text-xs text-slate-300">{req.user_id}</td>
+                                                        <td className="py-4">
+                                                            <span className={`px-2 py-1 rounded text-[10px] font-bold ${
+                                                                req.status === 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400' : 
+                                                                req.status === 'READY_FOR_COMPLETION' ? 'bg-indigo-500/10 text-indigo-400' :
+                                                                req.status === 'ASSETS_PROCESSED' ? 'bg-blue-500/10 text-blue-400' :
+                                                                req.status === 'BYOD_PROCESSED' ? 'bg-sky-500/10 text-sky-400' :
+                                                                'bg-orange-500/10 text-orange-400'
+                                                            }`}>
+                                                                {req.status.replace(/_/g, ' ')}
+                                                            </span>
+                                                        </td>
+                                                        <td className="py-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                <div className={`flex items-center gap-2 text-xs ${hasPendingAssets ? 'text-orange-400' : 'text-slate-500'}`}>
+                                                                    <div className={`w-1.5 h-1.5 rounded-full ${hasPendingAssets ? 'bg-orange-400 animate-pulse' : 'bg-emerald-500'}`}></div>
+                                                                    {req.assets_snapshot?.length || 0} Assets {hasPendingAssets ? '(Pending)' : '(Processed)'}
+                                                                </div>
+                                                                <div className={`flex items-center gap-2 text-xs ${hasPendingByod ? 'text-orange-400' : 'text-slate-500'}`}>
+                                                                    <div className={`w-1.5 h-1.5 rounded-full ${hasPendingByod ? 'bg-orange-400 animate-pulse' : 'bg-emerald-500'}`}></div>
+                                                                    {req.byod_snapshot?.length || 0} BYOD {hasPendingByod ? '(Pending)' : '(Processed)'}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="py-4 text-right">
+                                                            <button
+                                                                onClick={() => handleCompleteExit(req.id)}
+                                                                disabled={req.status === 'COMPLETED' || (!isReady && req.status !== 'COMPLETED')}
+                                                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                                                                    req.status === 'COMPLETED' 
+                                                                    ? 'bg-emerald-500/10 text-emerald-500 cursor-not-allowed border border-emerald-500/20' 
+                                                                    : isReady 
+                                                                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20'
+                                                                        : 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
+                                                                }`}
+                                                                title={req.status === 'COMPLETED' ? "Workflow Finished" : (!isReady ? "All assets and BYOD devices must be processed before final deactivation." : "")}
+                                                            >
+                                                                {req.status === 'COMPLETED' ? 'Deactivated' : (isReady ? 'Finalize Deactivation' : 'Waiting for Managers')}
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
                                         </tbody>
                                     </table>
                                 </div>

@@ -9,7 +9,7 @@ def setup_database():
             print("\n=== CREATING DATABASE SCHEMAS ===\n")
             
             # Create all the necessary schemas
-            schemas = ["auth", "asset", "helpdesk", "system", "exit", "support", "procurement"]
+            schemas = ["auth", "asset", "helpdesk", "system", "exit", "support", "procurement", "audit"]
             for schema in schemas:
                 try:
                     connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))

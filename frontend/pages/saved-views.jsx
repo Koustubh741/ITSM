@@ -1,29 +1,38 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { ArrowLeft, LayoutGrid, List, Filter, Search, Tag, Calendar, User } from 'lucide-react';
-import SavedViewsDrawer from '@/components/SavedViewsDrawer';
+import { ArrowLeft, LayoutGrid, List, Filter, Search, Tag, Calendar, User, Trash2, Plus } from 'lucide-react';
 
 export default function SavedViewsPage() {
-    // Reusing the drawer logic essentially, but displayed as a full page grid
     const [savedViews, setSavedViews] = useState([]);
     const [search, setSearch] = useState('');
 
-    useEffect(() => {
-        // Load from localStorage or Mock
+    const loadViews = () => {
         const stored = localStorage.getItem('asset_saved_views');
         if (stored) {
             setSavedViews(JSON.parse(stored));
         } else {
-            // Mock Defaults (Sync with Drawer defaults for consistency)
-            setSavedViews([
+            const defaults = [
                 { id: 1, name: 'Expiring Warranties (IT)', filters: { department: 'IT', warranty: 'Expiring Soon' }, created: '2023-11-01', shared: true },
-                { id: 2, name: 'Unassigned Laptops', filters: { category: 'Laptop', status: 'In Stock' }, created: '2023-11-10', shared: false },
+                { id: 2, name: 'Unassigned Laptops', filters: { category: 'Laptop', assignment: 'Unassigned' }, created: '2023-11-10', shared: false },
                 { id: 3, name: 'Engineering High Value', filters: { department: 'Engineering', category: 'All' }, created: '2023-11-15', shared: false },
                 { id: 4, name: 'Retired Servers 2023', filters: { category: 'Server', status: 'Retired' }, created: '2023-10-20', shared: true }
-            ]);
+            ];
+            setSavedViews(defaults);
+            localStorage.setItem('asset_saved_views', JSON.stringify(defaults));
         }
+    };
+
+    useEffect(() => {
+        loadViews();
     }, []);
+
+    const handleDelete = (id) => {
+        if (!confirm('Are you sure you want to delete this saved view?')) return;
+        const updated = savedViews.filter(v => v.id !== id);
+        setSavedViews(updated);
+        localStorage.setItem('asset_saved_views', JSON.stringify(updated));
+    };
 
     const filteredViews = savedViews.filter(v => v.name.toLowerCase().includes(search.toLowerCase()));
 
@@ -45,6 +54,9 @@ export default function SavedViewsPage() {
                             <p className="text-slate-400 mt-1">Manage your personal and shared asset filters</p>
                         </div>
                     </div>
+                    <Link href="/assets/search" className="btn btn-primary bg-purple-600 hover:bg-purple-500 text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-lg shadow-purple-500/20">
+                        <Plus size={20} /> New View
+                    </Link>
                 </div>
 
                 {/* Toolbar */}
@@ -59,21 +71,20 @@ export default function SavedViewsPage() {
                             className="w-full bg-slate-950 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:ring-2 focus:ring-purple-500/50 outline-none"
                         />
                     </div>
-                    <div className="flex gap-2">
-                        <button className="p-2 text-slate-400 hover:text-white bg-white/5 rounded-lg border border-white/5 hover:bg-white/10">
-                            <LayoutGrid size={20} />
-                        </button>
-                        <button className="p-2 text-purple-400 bg-purple-500/10 rounded-lg border border-purple-500/20">
-                            <List size={20} />
-                        </button>
-                    </div>
                 </div>
 
                 {/* Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {filteredViews.length > 0 ? filteredViews.map(view => (
                         <div key={view.id} className="group relative bg-slate-900/40 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/10 transition-all duration-300">
-                            <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={() => handleDelete(view.id)}
+                                    className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg border border-red-500/20 transition-colors"
+                                    title="Delete View"
+                                >
+                                    <Trash2 size={16} />
+                                </button>
                                 <Link
                                     href={{
                                         pathname: '/assets/search',
@@ -116,14 +127,18 @@ export default function SavedViewsPage() {
                                         </span>
                                     )}
                                 </div>
-                                <div className="text-xs text-slate-500">
-                                    ID: {view.id}
-                                </div>
                             </div>
                         </div>
                     )) : (
-                        <div className="col-span-full py-12 text-center text-slate-500">
-                            No saved views found matching "{search}"
+                        <div className="col-span-full py-12 text-center">
+                            <div className="p-6 inline-block rounded-full bg-slate-900 border border-white/5 mb-4">
+                                <Filter size={48} className="text-slate-700" />
+                            </div>
+                            <h3 className="text-xl font-bold text-slate-400">No Saved Views Found</h3>
+                            <p className="text-slate-600 mt-2 mb-6">Create a custom filter view in Smart Search to see it here.</p>
+                            <Link href="/assets/search" className="text-purple-400 hover:text-purple-300 font-bold border-b border-purple-400/30 pb-1">
+                                Go to Smart Search &rarr;
+                            </Link>
                         </div>
                     )}
                 </div>

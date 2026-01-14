@@ -66,10 +66,19 @@ export default function EnterpriseFeatures() {
             border: "border-cyan-400/20"
         },
         {
-            title: "CMDB Map (Demo)",
-            description: "Enhanced relationship visualization for assets.",
+            title: "Asset Audit Hub",
+            description: "Monitor external discovery and ingestion trails.",
+            icon: ClipboardCheck,
+            href: "/audit/overview",
+            color: "text-amber-400",
+            bg: "bg-amber-400/10",
+            border: "border-amber-400/20"
+        },
+        {
+            title: "CMDB Visualizer",
+            description: "Deep relationship visualization and impact analysis for any infrastructure asset.",
             icon: Network,
-            href: "/assets/1/cmdb", // Hardcoded ID for demo
+            href: "/assets/cmdb-overview", 
             color: "text-pink-400",
             bg: "bg-pink-400/10",
             border: "border-pink-400/20"

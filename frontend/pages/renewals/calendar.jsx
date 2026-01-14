@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { ArrowLeft, ChevronLeft, ChevronRight, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import { format, addMonths, subMonths, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, addDays } from 'date-fns';
 
+import apiClient from '@/lib/apiClient';
+
 export default function RenewalsCalendarPage() {
     const [currentMonth, setCurrentMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(new Date());
@@ -11,22 +13,13 @@ export default function RenewalsCalendarPage() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Fetch Data from LocalStorage
-        const fetchEvents = () => {
+        // Fetch Data from API
+        const fetchEvents = async () => {
             setLoading(true);
             try {
-                const savedAssets = localStorage.getItem('assets');
-                let assetList = [];
-
-                if (savedAssets) {
-                    assetList = JSON.parse(savedAssets);
-                } else {
-                    const { initialMockAssets } = require('@/data/mockAssets');
-                    assetList = initialMockAssets;
-                }
-
-                const newEvents = assetList
-                    .filter(a => a.warranty_expiry) // Only assets with expiry
+                const assetList = await apiClient.getAssets();
+                const warrantyEvents = assetList
+                    .filter(a => a.warranty_expiry)
                     .map(a => ({
                         date: a.warranty_expiry,
                         title: 'Warranty Expiry',
@@ -34,21 +27,27 @@ export default function RenewalsCalendarPage() {
                         type: 'Warranty' // Orange
                     }));
 
-                // Add some mock Service Contracts for variety, attached to random assets
-                const contractEvents = assetList.slice(0, 5).map(a => {
-                    const d = new Date();
-                    d.setDate(d.getDate() + Math.floor(Math.random() * 60));
-                    return {
-                        date: d.toISOString().split('T')[0],
-                        title: 'Service Contract Renewal',
+                const contractEvents = assetList
+                    .filter(a => a.contract_expiry)
+                    .map(a => ({
+                        date: a.contract_expiry,
+                        title: 'Contract Renewal',
                         asset: a.name,
                         type: 'Contract' // Blue
-                    };
-                });
+                    }));
 
-                setEvents([...newEvents, ...contractEvents]);
+                const licenseEvents = assetList
+                    .filter(a => a.license_expiry)
+                    .map(a => ({
+                        date: a.license_expiry,
+                        title: 'License Expiry',
+                        asset: a.name,
+                        type: 'License' // Purple/Cyan
+                    }));
+
+                setEvents([...warrantyEvents, ...contractEvents, ...licenseEvents]);
             } catch (e) {
-                console.error(e);
+                console.error('Failed to fetch calendar events:', e);
             } finally {
                 setLoading(false);
             }
@@ -130,10 +129,12 @@ export default function RenewalsCalendarPage() {
                                         </span>
 
                                         <div className="mt-2 space-y-1">
-                                            {dayEvents.slice(0, 3).map((e, idx) => (
-                                                <div key={idx} className={`h-1.5 rounded-full w-full ${e.type === 'Warranty' ? 'bg-orange-500' : 'bg-blue-500'
-                                                    }`} />
-                                            ))}
+                                            {dayEvents.slice(0, 3).map((e, idx) => {
+                                                let bgColor = 'bg-blue-500';
+                                                if (e.type === 'Warranty') bgColor = 'bg-orange-500';
+                                                if (e.type === 'License') bgColor = 'bg-purple-500';
+                                                return <div key={idx} className={`h-1.5 rounded-full w-full ${bgColor}`} />;
+                                            })}
                                             {dayEvents.length > 3 && (
                                                 <div className="text-[10px] text-slate-500 text-center">+{dayEvents.length - 3} more</div>
                                             )}
@@ -153,14 +154,18 @@ export default function RenewalsCalendarPage() {
                         <div className="space-y-4">
                             {selectedDayEvents.length > 0 ? selectedDayEvents.map((e, i) => (
                                 <div key={i} className="flex gap-4 p-4 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
-                                    <div className={`mt-1 ${e.type === 'Warranty' ? 'text-orange-400' : 'text-blue-400'}`}>
-                                        {e.type === 'Warranty' ? <AlertCircle size={20} /> : <Clock size={20} />}
+                                    <div className={`mt-1 
+                                        ${e.type === 'Warranty' ? 'text-orange-400' : 
+                                          e.type === 'License' ? 'text-purple-400' : 'text-blue-400'}`}>
+                                        {e.type === 'Warranty' ? <AlertCircle size={20} /> : 
+                                         e.type === 'License' ? <CheckCircle size={20} /> : <Clock size={20} />}
                                     </div>
                                     <div>
                                         <h4 className="font-semibold text-slate-200">{e.title}</h4>
                                         <div className="text-sm text-slate-400 mt-1">{e.asset}</div>
-                                        <div className={`text-xs mt-2 inline-block px-2 py-0.5 rounded ${e.type === 'Warranty' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'
-                                            }`}>
+                                        <div className={`text-xs mt-2 inline-block px-2 py-0.5 rounded 
+                                            ${e.type === 'Warranty' ? 'bg-orange-500/10 text-orange-400' : 
+                                              e.type === 'License' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}`}>
                                             {e.type}
                                         </div>
                                     </div>

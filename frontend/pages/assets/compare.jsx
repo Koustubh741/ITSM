@@ -1,26 +1,30 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { ArrowLeft, Split, Plus, X } from 'lucide-react';
+import { ArrowLeft, Split, AlertCircle } from 'lucide-react';
+import apiClient from '@/lib/apiClient';
 
 export default function AssetComparisonPage() {
     const [selectedAsset1, setSelectedAsset1] = useState(null);
     const [selectedAsset2, setSelectedAsset2] = useState(null);
     const [comparisonData, setComparisonData] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
-    // Mock List for Selection
+    // List for Selection
     const [assets, setAssets] = useState([]);
 
     useEffect(() => {
         // Load real assets
-        const savedAssets = localStorage.getItem('assets');
-        if (savedAssets) {
-            setAssets(JSON.parse(savedAssets));
-        } else {
-            const { initialMockAssets } = require('@/data/mockAssets');
-            setAssets(initialMockAssets);
-        }
+        const fetchAssets = async () => {
+            try {
+                const apiAssets = await apiClient.getAssets();
+                setAssets(apiAssets);
+            } catch (error) {
+                console.error('Failed to fetch assets:', error);
+            }
+        };
+        fetchAssets();
     }, []);
 
     const handleCompare = () => {
@@ -29,20 +33,35 @@ export default function AssetComparisonPage() {
 
         // Simulate "Processing" for 500ms
         setTimeout(() => {
-            // loose comparison or string conversion for IDs
             const a1 = assets.find(a => String(a.id) === String(selectedAsset1));
             const a2 = assets.find(a => String(a.id) === String(selectedAsset2));
 
+            if (a1 && a2 && a1.segment !== a2.segment) {
+                setError("Not a valid comparison: IT and Non-IT assets cannot be compared side-by-side.");
+                setComparisonData(null);
+                setLoading(false);
+                return;
+            }
+
+            setError(null);
+
             if (a1 && a2) {
-                // Normalize specs for comparison
+                // Normalize specs for comparison from backend data structure
                 const normalizeSpecs = (asset) => {
-                    const s = asset.specs || {};
+                    const s = asset.specifications || {};
+                    const hw = s.hardware || {};
+                    const os = s.os || {};
+                    
+                    const isNonIT = asset.segment === 'NON-IT';
+
                     return {
+                        segment: asset.segment || 'IT',
                         model: asset.model || 'N/A',
-                        processor: s.processor || 'N/A',
-                        ram: s.ram || 'N/A',
-                        storage: s.storage || 'N/A',
-                        graphics: s.graphics || 'Integrated',
+                        processor: isNonIT ? (s.material || s.dimensions || 'N/A') : (hw.processor || hw.cpu || 'N/A'),
+                        ram: isNonIT ? (s.color || s.weight || 'N/A') : (hw.ram || 'N/A'),
+                        storage: isNonIT ? (s.brand || 'N/A') : (hw.storage || 'N/A'),
+                        graphics: isNonIT ? (s.condition || 'N/A') : (hw.graphics || hw.gpu || 'N/A'),
+                        operating_system: isNonIT ? 'Non-applicable' : (os.name || os.version || 'N/A'),
                         purchase_date: asset.purchase_date || 'N/A',
                         warranty: asset.warranty_expiry || 'N/A',
                         cost: asset.cost ? `₹${asset.cost.toLocaleString()}` : 'N/A'
@@ -55,7 +74,7 @@ export default function AssetComparisonPage() {
                 });
             }
             setLoading(false);
-        }, 500);
+        }, 300);
     };
 
     return (
@@ -86,7 +105,7 @@ export default function AssetComparisonPage() {
                             onChange={(e) => setSelectedAsset1(e.target.value)}
                         >
                             <option value="">Select Asset...</option>
-                            {assets.map(a => <option key={a.id} value={a.id}>{a.name} ({a.id})</option>)}
+                            {assets.map(a => <option key={a.id} value={a.id}>{a.name} — {a.model} ({a.serial_number})</option>)}
                         </select>
                     </div>
 
@@ -104,11 +123,11 @@ export default function AssetComparisonPage() {
                             onChange={(e) => setSelectedAsset2(e.target.value)}
                         >
                             <option value="">Select Asset...</option>
-                            {assets.map(a => <option key={a.id} value={a.id}>{a.name} ({a.id})</option>)}
+                            {assets.map(a => <option key={a.id} value={a.id}>{a.name} — {a.model} ({a.serial_number})</option>)}
                         </select>
                     </div>
 
-                    <div className="md:col-span-2 flex justify-center mt-4">
+                    <div className="md:col-span-2 flex justify-center mt-4 space-x-4">
                         <button
                             onClick={handleCompare}
                             disabled={!selectedAsset1 || !selectedAsset2 || loading}
@@ -116,8 +135,24 @@ export default function AssetComparisonPage() {
                         >
                             {loading ? 'Analyzing...' : 'Compare Specifications'}
                         </button>
+                        {comparisonData && (
+                            <button
+                                onClick={() => setComparisonData(null)}
+                                className="px-8 py-3 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
+                            >
+                                Clear
+                            </button>
+                        )}
                     </div>
                 </div>
+
+                {/* Error Message */}
+                {error && (
+                    <div className="p-6 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+                        <AlertCircle size={20} />
+                        <span className="font-medium">{error}</span>
+                    </div>
+                )}
 
                 {/* Comparison Result */}
                 {comparisonData && (
@@ -134,18 +169,22 @@ export default function AssetComparisonPage() {
                         </div>
 
                         {/* Rows */}
-                        {['Model', 'Processor', 'RAM', 'Storage', 'Graphics', 'Purchase Date', 'Warranty', 'Cost'].map(spec => (
-                            <>
+                        {['Asset Segment', 'Model', 'Processor', 'RAM', 'Storage', 'Graphics', 'Operating System', 'Purchase Date', 'Warranty', 'Cost'].map(spec => (
+                            <React.Fragment key={spec}>
                                 <div className="p-4 bg-slate-950/30 border-b border-r border-white/5 text-sm font-medium text-slate-400 flex items-center justify-center">
-                                    {spec}
+                                    {spec === 'Asset Segment' ? 'Segment' : spec}
                                 </div>
-                                <div className="p-4 border-b border-r border-white/5 text-center text-slate-200">
-                                    {comparisonData.asset1.specs[spec.toLowerCase().replace(' ', '_')]}
+                                <div className="p-4 border-b border-r border-white/5 text-center">
+                                    <span className={`text-slate-200 ${spec === 'Asset Segment' ? 'px-2 py-0.5 rounded text-xs font-bold ' + (comparisonData.asset1.specs.segment === 'IT' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400') : ''}`}>
+                                        {comparisonData.asset1.specs[spec.toLowerCase().replace(' ', '_')]}
+                                    </span>
                                 </div>
-                                <div className="p-4 border-b border-white/5 text-center text-slate-200">
-                                    {comparisonData.asset2.specs[spec.toLowerCase().replace(' ', '_')]}
+                                <div className="p-4 border-b border-white/5 text-center">
+                                    <span className={`text-slate-200 ${spec === 'Asset Segment' ? 'px-2 py-0.5 rounded text-xs font-bold ' + (comparisonData.asset2.specs.segment === 'IT' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400') : ''}`}>
+                                        {comparisonData.asset2.specs[spec.toLowerCase().replace(' ', '_')]}
+                                    </span>
                                 </div>
-                            </>
+                            </React.Fragment>
                         ))}
 
                         {/* Summary / Score */}

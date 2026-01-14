@@ -1,12 +1,8 @@
-/**
- * API Client for Asset Management Backend
- */
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+import { API_URL, API_BASE_URL } from './apiConfig';
 
 class ApiClient {
     constructor() {
-        this.baseURL = API_BASE_URL;
+        this.baseURL = API_URL;
         this.token = null;
 
         // Load token from localStorage if available
@@ -49,6 +45,10 @@ class ApiClient {
         // Handle body serialization
         if (config.body && typeof config.body === 'object' && !(config.body instanceof FormData)) {
             config.body = JSON.stringify(config.body);
+        }
+
+        if (config.body instanceof FormData) {
+             delete headers['Content-Type'];
         }
 
         try {
@@ -259,6 +259,26 @@ class ApiClient {
         });
     }
 
+    async uploadPO(requestId, uploaderId, file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        // uploader_id is passed as query param in the backend endpoint signature?
+        // Checking backend: @router.post("/po/{request_id}") async def upload_po(request_id: str, uploader_id: str, file: UploadFile = File(...))
+        // FastApi expects query params for simple types unless Form(...) is used.
+        // Let's assume uploader_id is a query param based on typical FastAPI behavior when mixed with File upload.
+        
+        return this.request(`/upload/po/${requestId}?uploader_id=${uploaderId}`, {
+            method: 'POST',
+            body: formData,
+            // Header content-type will be automatically set by fetch for FormData (multipart/form-data) with boundary
+            // We need to make sure the request helper doesn't override it with application/json
+        });
+    }
+
+    async getPO(requestId) {
+        return this.request(`/upload/po/${requestId}`);
+    }
+
     // Legacy compatibility methods
     async getRequests(params = {}) {
         return this.getAssetRequests(params);
@@ -442,13 +462,27 @@ class ApiClient {
 
     // Health Check
     async healthCheck() {
-        return fetch(`${this.baseURL}/health`)
+        return fetch(`${API_BASE_URL}/health`)
             .then(res => res.json());
     }
 
     async dbHealthCheck() {
-        return fetch(`${this.baseURL}/health/db`)
+        return fetch(`${API_BASE_URL}/health/db`)
             .then(res => res.json());
+    }
+
+    // Audit Logs
+    async getAuditLogs(params = {}) {
+        const query = new URLSearchParams(params).toString();
+        return this.request(`/audit/logs${query ? `?${query}` : ''}`);
+    }
+
+    async getAuditStats() {
+        return this.request('/audit/stats');
+    }
+
+    async syncAuditLogs() {
+        return this.request('/audit/sync', { method: 'POST' });
     }
 }
 

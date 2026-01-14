@@ -38,9 +38,9 @@ export default function TicketsDashboard() {
 
                 // Calc Stats
                 const counts = {
-                    open: mappedTickets.filter(t => t.status === 'Open' || t.status === 'OPEN').length,
-                    pending: mappedTickets.filter(t => t.status === 'Pending' || t.status === 'PENDING').length,
-                    closed: mappedTickets.filter(t => t.status === 'Closed' || t.status === 'CLOSED').length
+                    open: mappedTickets.filter(t => t.status?.toUpperCase() === 'OPEN' || t.status?.toUpperCase() === 'IN_PROGRESS').length,
+                    pending: mappedTickets.filter(t => t.status?.toUpperCase() === 'PENDING').length,
+                    closed: mappedTickets.filter(t => t.status?.toUpperCase() === 'CLOSED' || t.status?.toUpperCase() === 'RESOLVED').length
                 };
                 setStats(counts);
                 setRecentTickets(mappedTickets.slice(0, 3)); // Show first 3 as recent
