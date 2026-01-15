@@ -3,7 +3,7 @@ FastAPI application entry point
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import traceback
 from routers import upload, workflows
 
@@ -34,14 +34,10 @@ async def debug_exception_handler(request: Request, exc: Exception):
 
 # Configure CORS
 # Allow all origins in development - restrict in production
+# For mobile app development, we allow all origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=["*"],  # Allow all origins for mobile app development
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -65,6 +61,11 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+# Favicon endpoint to prevent 404 errors in logs
+@app.get("/favicon.ico")
+async def favicon():
+    return Response(status_code=204)
 
 # Database health check endpoint
 @app.get("/health/db")

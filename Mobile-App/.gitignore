@@ -1,0 +1,96 @@
+# ================================
+# OS / Editor
+# ================================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.log
+
+# ================================
+# Node / JavaScript
+# ================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.expo/
+.expo-shared/
+web-build/
+
+# ================================
+# Metro / React Native
+# ================================
+.metro-health-check*
+*.map
+
+# ================================
+# Environment files
+# ================================
+.env
+.env.*
+!.env.example
+
+# ================================
+# Android
+# ================================
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.idea/
+android/*.iml
+
+# Keystore (never commit)
+*.keystore
+*.jks
+
+# ================================
+# iOS
+# ================================
+ios/Pods/
+ios/build/
+ios/*.xcworkspace
+ios/DerivedData/
+ios/.idea/
+ios/*.pbxuser
+ios/*.mode1v3
+ios/*.mode2v3
+ios/*.perspectivev3
+ios/*.xccheckout
+ios/*.xcuserstate
+ios/*.xcuserdatad
+ios/*.orig
+
+# CocoaPods
+vendor/
+
+# ================================
+# Expo
+# ================================
+.expo/
+dist/
+expo-env.d.ts
+
+# ================================
+# Fastlane
+# ================================
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# ================================
+# Testing
+# ================================
+coverage/
+
+# ================================
+# Temporary files
+# ================================
+tmp/
+temp/

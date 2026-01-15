@@ -68,3 +68,7 @@ class AssetAssignmentRequest(BaseModel):
     assigned_to_id: Optional[str] = None
     location: Optional[str] = "Office"
     assignment_date: Optional[date] = None
+
+
+class URLRequest(BaseModel):
+    url: str

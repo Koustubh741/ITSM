@@ -1,0 +1,15 @@
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/CMakeFiles/appmodules.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/CMakeFiles/rebuild_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnreanimated_autolinked_build/CMakeFiles/react_codegen_rnreanimated.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnreanimated_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnreanimated_autolinked_build/CMakeFiles/rebuild_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/safeareacontext_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/safeareacontext_autolinked_build/CMakeFiles/rebuild_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnsvg_autolinked_build/CMakeFiles/react_codegen_rnsvg.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnsvg_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnsvg_autolinked_build/CMakeFiles/rebuild_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnworklets_autolinked_build/CMakeFiles/react_codegen_rnworklets.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnworklets_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/vedantgoyal/Documents/ITSM/Mobile-App/android/app/.cxx/Debug/165k6b39/x86_64/rnworklets_autolinked_build/CMakeFiles/rebuild_cache.dir

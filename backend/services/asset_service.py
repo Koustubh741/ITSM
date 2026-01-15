@@ -59,6 +59,25 @@ def get_asset_by_id(asset_id: str) -> Optional[AssetResponse]:
         db.close()
 
 
+def search_asset_by_id_or_serial(asset_id: str = None, serial_number: str = None) -> Optional[AssetResponse]:
+    """
+    Search for an asset by ID or Serial Number
+    """
+    db = SessionLocal()
+    try:
+        asset = None
+        if asset_id:
+            asset = db.query(Asset).filter(Asset.id == asset_id).first()
+        elif serial_number:
+            asset = db.query(Asset).filter(Asset.serial_number == serial_number).first()
+        
+        if asset:
+            return AssetResponse.model_validate(asset)
+        return None
+    finally:
+        db.close()
+
+
 def get_assets_by_assigned_to(user_name: str) -> List[AssetResponse]:
     """
     Get all assets assigned to a specific user
