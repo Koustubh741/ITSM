@@ -25,6 +25,7 @@ export default function Layout({ children }) {
     const ROLE_DASHBOARD_MAP = {
         'System Admin': '/dashboard/system-admin',
         'Asset Manager': '/dashboard/asset-inventory-manager',
+        'Asset & Inventory Manager': '/dashboard/asset-inventory-manager',
         'Inventory Manager': '/dashboard/asset-inventory-manager',
         'Procurement Manager': '/dashboard/procurement-finance',
         'Procurement & Finance': '/dashboard/procurement-finance', // Handle both label variations if needed
@@ -40,7 +41,7 @@ export default function Layout({ children }) {
 
     const allNavItems = [
         { label: 'Dashboard', href: dashboardPath, icon: LayoutDashboard },
-        { label: 'Enterprise', href: '/enterprise-features', icon: Sparkles },
+        { label: 'Enterprise', href: '/enterprise', icon: Sparkles },
         { label: 'Assets', href: '/assets', icon: Server },
         { label: 'Renewals', href: '/renewals', icon: RotateCcw },
         { label: 'Procurement', href: '/procurement', icon: ShoppingBag },
@@ -48,10 +49,10 @@ export default function Layout({ children }) {
         { label: 'Settings', href: '/settings', icon: Settings },
     ]
 
-    const fullAccessRoles = ['System Admin', 'Asset Manager'];
+    const fullAccessRoles = ['System Admin', 'Asset & Inventory Manager', 'Asset Manager', 'Inventory Manager'];
     const navItems = fullAccessRoles.includes(currentRole.label)
         ? allNavItems
-        : allNavItems.filter(item => item.label === 'Dashboard');
+        : allNavItems.filter(item => item.label === 'Dashboard' || item.label === 'Enterprise'); // Allow Enterprise portal for others too if desired
 
     return (
         <div className="min-h-screen flex text-slate-100 font-sans">

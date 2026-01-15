@@ -5,7 +5,7 @@ import { useRole } from '@/contexts/RoleContext';
 
 export default function InventoryManagerDashboard() {
     const { user } = useRole();
-    const { requests, inventoryCheckAvailable, inventoryCheckNotAvailable, inventoryAllocateDelivered, assets } = useAssetContext();
+    const { requests, inventoryCheckAvailable, inventoryCheckNotAvailable, inventoryAllocateDelivered, assets, exitRequests, processExitAssets } = useAssetContext();
 
     // ENTERPRISE: Requests awaiting inventory check (exclude fulfilled/closed)
     const awaitingStockCheck = requests.filter(r => {
@@ -199,12 +199,75 @@ export default function InventoryManagerDashboard() {
                                         <td className="p-3 text-right">
                                             <button
                                                 onClick={async () => {
-                                                    const assetId = prompt(`Enter asset ID to allocate for ${req.assetType}:`, "AST-" + Math.floor(Math.random() * 1000));
+                                                    const assetId = prompt(`Enter asset ID to allocate for ${req.assetType}:`, req.assetId || ("AST-" + Math.floor(Math.random() * 1000)));
                                                     if (assetId) await inventoryAllocateDelivered(req.id, assetId, user.name || 'Inventory Manager');
                                                 }}
                                                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-emerald-500/10 transition-all flex items-center gap-2 ml-auto"
                                             >
                                                 <CheckCircle size={14} /> Allocate Asset → Complete
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* SECTION 3: Exit Reclamations (NEW) */}
+            {exitRequests.filter(r => r.status === 'OPEN' || r.status === 'BYOD_PROCESSED').length > 0 && (
+                <div className="glass-panel p-6">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                             <Archive className="text-orange-400" />
+                             Asset Reclamation (Employee Exit)
+                             <span className="bg-orange-500/10 text-orange-400 text-xs px-2 py-0.5 rounded-full border border-orange-500/20">
+                                 {exitRequests.filter(r => r.status === 'OPEN' || r.status === 'BYOD_PROCESSED').length}
+                             </span>
+                        </h3>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-white/5 text-slate-400 text-xs uppercase font-bold">
+                                <tr>
+                                    <th className="p-3 rounded-l-lg">User</th>
+                                    <th className="p-3">Assets to Reclaim</th>
+                                    <th className="p-3">Status</th>
+                                    <th className="p-3 text-right rounded-r-lg">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {exitRequests.filter(r => r.status === 'OPEN' || r.status === 'BYOD_PROCESSED').map(req => (
+                                    <tr key={req.id} className="hover:bg-white/5 transition-colors">
+                                        <td className="p-3">
+                                            <div className="text-white font-medium">{req.user_id}</div>
+                                            <div className="text-xs text-slate-500">Exit ID: {req.id}</div>
+                                        </td>
+                                        <td className="p-3">
+                                            <div className="text-slate-300 text-sm">
+                                                {req.assets_snapshot?.length || 0} Physical Assets
+                                            </div>
+                                            <div className="text-xs text-slate-500 font-mono">
+                                                {req.assets_snapshot?.map(a => a.asset_id).join(', ')}
+                                            </div>
+                                        </td>
+                                        <td className="p-3">
+                                            <span className="text-[10px] px-2 py-1 rounded font-bold bg-orange-500/10 text-orange-400 border border-orange-500/20">
+                                                {req.status}
+                                            </span>
+                                        </td>
+                                        <td className="p-3 text-right">
+                                            <button
+                                                onClick={async () => {
+                                                    if (confirm(`Confirm receipt and QC of all company assets for user ${req.user_id}?`)) {
+                                                        await processExitAssets(req.id);
+                                                    }
+                                                }}
+                                                className="bg-orange-600 hover:bg-orange-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-orange-500/10 transition-all"
+                                            >
+                                                Process Asset Returns
                                             </button>
                                         </td>
                                     </tr>

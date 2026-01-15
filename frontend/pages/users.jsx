@@ -1,54 +1,120 @@
 import Link from 'next/link';
-import { ArrowLeft, User, Monitor, Disc, Ticket, Search } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { ArrowLeft, User, Monitor, Disc, Ticket, Search, Mail } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import apiClient from '@/lib/apiClient';
 
 export default function UsersPage() {
     const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
 
     useEffect(() => {
-        // Load Data from LocalStorage
-        const fetchUsers = () => {
-            const savedAssets = localStorage.getItem('assets');
-            let assetList = [];
-            if (savedAssets) assetList = JSON.parse(savedAssets);
-            else {
-                const { initialMockAssets } = require('@/data/mockAssets');
-                assetList = initialMockAssets;
-            }
+        const loadData = async () => {
+            setLoading(true);
+            try {
+                // Fetch all necessary data
+                const [apiAssets, apiTickets] = await Promise.all([
+                    apiClient.getAssets(),
+                    apiClient.getTickets()
+                ]);
 
-            // Group by Assigned User
-            const userMap = {};
-            assetList.forEach(a => {
-                const user = a.assigned_to;
-                if (user && user !== 'Unassigned') {
-                    if (!userMap[user]) {
-                        // Deterministic seed based on name
-                        const seed = user.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-
-                        userMap[user] = {
-                            id: Math.random().toString(36).substr(2, 9),
-                            name: user,
-                            role: 'Employee', // specific roles not in asset data
-                            status: 'Active',
-                            assets_count: 0,
-                            assigned_assets: [], // Store real assets
-                            software_count: (seed % 5) + 1, // Deterministic mock (1-5)
-                            tickets_count: (seed % 3) // Deterministic mock (0-2)
-                        };
-                    }
-                    userMap[user].assets_count += 1;
-                    userMap[user].assigned_assets.push(a);
+                // Optional: Try to fetch real users, but fall back to discovery if 403
+                let apiUsers = [];
+                try {
+                    apiUsers = await apiClient.getUsers();
+                } catch (e) {
+                    console.warn('Could not fetch user list directly, using discovery from assets/tickets');
                 }
-            });
 
-            setUsers(Object.values(userMap));
+                const userMap = {};
+
+                // 1. Initialize from User List (if available)
+                apiUsers.forEach(u => {
+                    userMap[u.full_name] = {
+                        id: u.id,
+                        name: u.full_name,
+                        role: u.role || 'Employee',
+                        status: u.status || 'Active',
+                        email: u.email,
+                        assets_count: 0,
+                        assigned_assets: [],
+                        software_licenses: [],
+                        software_count: 0,
+                        tickets_count: 0,
+                        tickets: []
+                    };
+                });
+
+                // 2. Discover/Update from Assets
+                apiAssets.forEach(asset => {
+                    const userName = asset.assigned_to;
+                    if (userName && userName !== 'Unassigned') {
+                        if (!userMap[userName]) {
+                            userMap[userName] = {
+                                id: userName,
+                                name: userName,
+                                role: 'Employee',
+                                status: 'Active',
+                                assets_count: 0,
+                                assigned_assets: [],
+                                software_licenses: [],
+                                software_count: 0,
+                                tickets_count: 0,
+                                tickets: []
+                            };
+                        }
+
+                        if (asset.type?.toUpperCase() === 'SOFTWARE' || asset.type?.toUpperCase() === 'LICENSE') {
+                            userMap[userName].software_licenses.push(asset);
+                            userMap[userName].software_count += 1;
+                        } else {
+                            userMap[userName].assigned_assets.push(asset);
+                            userMap[userName].assets_count += 1;
+                        }
+                    }
+                });
+
+                // 3. Discover/Update from Tickets
+                apiTickets.forEach(ticket => {
+                    const userName = ticket.requestor_id;
+                    if (userName) {
+                        if (!userMap[userName]) {
+                            userMap[userName] = {
+                                id: userName,
+                                name: userName,
+                                role: 'Employee',
+                                status: 'Active',
+                                assets_count: 0,
+                                assigned_assets: [],
+                                software_licenses: [],
+                                software_count: 0,
+                                tickets_count: 0,
+                                tickets: []
+                            };
+                        }
+                        userMap[userName].tickets.push(ticket);
+                        userMap[userName].tickets_count += 1;
+                    }
+                });
+
+                setUsers(Object.values(userMap));
+            } catch (error) {
+                console.error('Failed to load user inventory data:', error);
+            } finally {
+                setLoading(false);
+            }
         };
-        fetchUsers();
+        loadData();
     }, []);
 
-    const filteredUsers = users.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.role.toLowerCase().includes(search.toLowerCase()));
+    const filteredUsers = users.filter(u => 
+        u.name?.toLowerCase().includes(search.toLowerCase()) || 
+        u.role?.toLowerCase().includes(search.toLowerCase()) ||
+        u.email?.toLowerCase().includes(search.toLowerCase())
+    );
+
+    if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-500">Loading inventory...</div>;
 
     return (
         <div className="min-h-screen p-8 bg-slate-950 text-slate-100">
@@ -89,7 +155,14 @@ export default function UsersPage() {
                                     </div>
                                     <div>
                                         <h3 className="font-bold text-lg text-slate-100">{user.name}</h3>
-                                        <p className="text-sm text-slate-400">{user.role}</p>
+                                        <div className="flex flex-col">
+                                            <p className="text-sm text-slate-400">{user.role}</p>
+                                            {user.email && (
+                                                <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
+                                                    <Mail size={12} /> {user.email}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 <span className={`text-xs px-2 py-1 rounded-full border ${user.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-slate-500/10 text-slate-400'}`}>
@@ -147,7 +220,17 @@ export default function UsersPage() {
                                 </div>
                                 <div>
                                     <h3 className="font-bold text-xl text-slate-100">{selectedUser.name}</h3>
-                                    <p className="text-sm text-slate-400">{selectedUser.role} • {selectedUser.status}</p>
+                                    <div className="flex items-center gap-3 text-sm text-slate-400">
+                                        <span>{selectedUser.role}</span>
+                                        <span>•</span>
+                                        <span>{selectedUser.status}</span>
+                                        {selectedUser.email && (
+                                            <>
+                                                <span>•</span>
+                                                <span className="flex items-center gap-1"><Mail size={14} /> {selectedUser.email}</span>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <button
@@ -185,20 +268,20 @@ export default function UsersPage() {
                                 </div>
                             </div>
 
-                            {/* 2. Software Licenses (Mock) */}
+                            {/* 2. Software Licenses (Real Data) */}
                             <div>
                                 <h4 className="flex items-center gap-2 text-purple-400 font-bold mb-4">
                                     <Disc size={18} /> Software Licenses ({selectedUser.software_count})
                                 </h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {Array.from({ length: selectedUser.software_count }).map((_, i) => (
-                                        <div key={i} className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3">
+                                    {selectedUser.software_licenses.map((license, i) => (
+                                        <div key={license.id} className="p-3 rounded-xl bg-white/5 border border-white/5 flex items-center gap-3">
                                             <div className="w-8 h-8 rounded bg-purple-500/20 flex items-center justify-center text-purple-400 text-xs font-bold">L</div>
                                             <div>
                                                 <div className="text-sm font-medium text-slate-200">
-                                                    {['Adobe Creative Cloud', 'Microsoft 365 E5', 'Zoom Pro', 'Slack Enterprise', 'Jira Cloud'][i % 5]}
+                                                    {license.name}
                                                 </div>
-                                                <div className="text-xs text-slate-500">License Active</div>
+                                                <div className="text-xs text-slate-500">{license.model} • {license.status}</div>
                                             </div>
                                         </div>
                                     ))}
@@ -206,28 +289,25 @@ export default function UsersPage() {
                                 </div>
                             </div>
 
-                            {/* 3. Recent Tickets (Mock) */}
+                            {/* 3. Recent Tickets (Real Data) */}
                             <div>
                                 <h4 className="flex items-center gap-2 text-rose-400 font-bold mb-4">
                                     <Ticket size={18} /> Recent Tickets ({selectedUser.tickets_count})
                                 </h4>
                                 <div className="space-y-3">
-                                    {Array.from({ length: selectedUser.tickets_count }).map((_, i) => {
-                                        const ticketId = `TCK-GEN-${100 + i}`;
-                                        return (
-                                            <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
-                                                <div>
-                                                    <div className="text-sm font-medium text-slate-200">
-                                                        {['VPN Access Issue', 'Monitor Flickering', 'Software Install Request'][i % 3]}
-                                                    </div>
-                                                    <div className="text-xs text-slate-500">{ticketId} • {['Open', 'Resolved', 'Pending'][i % 3]}</div>
+                                    {selectedUser.tickets.map(ticket => (
+                                        <div key={ticket.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                                            <div>
+                                                <div className="text-sm font-medium text-slate-200">
+                                                    {ticket.subject}
                                                 </div>
-                                                <Link href={`/tickets/${ticketId}`} className="text-xs text-rose-400 hover:text-white">
-                                                    View
-                                                </Link>
+                                                <div className="text-xs text-slate-500">{ticket.id} • {ticket.status} • {new Date(ticket.created_at).toLocaleDateString()}</div>
                                             </div>
-                                        );
-                                    })}
+                                            <Link href={`/tickets/${ticket.id}`} className="text-xs text-rose-400 hover:text-white font-bold bg-rose-500/10 px-3 py-1 rounded-lg">
+                                                View
+                                            </Link>
+                                        </div>
+                                    ))}
                                     {selectedUser.tickets_count === 0 && <div className="text-slate-500 italic">No recent tickets.</div>}
                                 </div>
                             </div>

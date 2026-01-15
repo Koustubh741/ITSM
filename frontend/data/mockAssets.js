@@ -1,6 +1,5 @@
 // Mock asset data used as fallback for AI Assistant
-module.exports = {
-  initialMockAssets: [
+export const initialMockAssets = [
     {
       id: 1,
       type: "Laptop",
@@ -37,5 +36,4 @@ module.exports = {
       assigned_to: "Unassigned",
       status: "Repair",
     },
-  ],
-};
+];

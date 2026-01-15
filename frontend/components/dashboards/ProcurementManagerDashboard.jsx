@@ -1,10 +1,11 @@
-import { ShoppingCart, FileText, Calendar, CreditCard, CheckCircle, Truck, XCircle } from 'lucide-react';
+import { ShoppingCart, FileText, Calendar, CreditCard, CheckCircle, Truck, XCircle, Upload } from 'lucide-react';
 import { useAssetContext } from '@/contexts/AssetContext';
 
 export default function ProcurementManagerDashboard() {
-    const { requests, procurementCreatePO, procurementConfirmDelivery, procurementApprove, procurementReject } = useAssetContext();
+    const { requests, procurementCreatePO, procurementConfirmDelivery, procurementApprove, procurementReject, procurementUploadPO } = useAssetContext();
 
     // ENTERPRISE: Requests needing PO creation (routed from Inventory)
+
     const awaitingPO = requests.filter(r =>
         r.currentOwnerRole === 'PROCUREMENT' &&
         r.status === 'PROCUREMENT_REQUIRED' &&
@@ -127,15 +128,22 @@ export default function ProcurementManagerDashboard() {
                                             >
                                                 <XCircle size={14} /> Reject
                                             </button>
-                                            <button
-                                                onClick={() => {
-                                                    const poNumber = prompt("Enter PO Number:", "PO-" + Math.floor(Math.random() * 10000));
-                                                    if (poNumber) procurementApprove(req.id, poNumber, "Procurement Officer");
-                                                }}
-                                                className="bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-blue-500/10 transition-all flex items-center gap-2"
-                                            >
-                                                <FileText size={14} /> Approve & Send to Finance
-                                            </button>
+                                            <label className="cursor-pointer bg-blue-600 hover:bg-blue-500 text-white text-xs px-4 py-2 rounded-lg font-medium shadow-lg shadow-blue-500/10 transition-all flex items-center gap-2">
+                                                <Upload size={14} /> Upload PO & Approve
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf" // Backend expects PDF
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const file = e.target.files[0];
+                                                        if (file) {
+                                                            if (confirm(`Upload PO ${file.name} for request ${req.id}?`)) {
+                                                                procurementUploadPO(req.id, file);
+                                                            }
+                                                        }
+                                                    }}
+                                                />
+                                            </label>
                                         </div>
                                     </td>
                                 </tr>

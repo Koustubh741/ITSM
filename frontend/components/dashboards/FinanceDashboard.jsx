@@ -1,12 +1,35 @@
 import { DollarSign, TrendingDown, PieChart, Download, CheckCircle, XCircle } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useAssetContext } from '@/contexts/AssetContext';
+import { useEffect, useState } from 'react';
+import apiClient from '@/lib/apiClient';
 
 export default function FinanceDashboard() {
     const { requests, financeApprove, financeReject } = useAssetContext();
 
     // ENTERPRISE: Requests awaiting budget approval
-    const budgetApprovals = requests.filter(r => r.currentOwnerRole === 'FINANCE' && r.procurementStage === 'PO_CREATED');
+    // ENTERPRISE: Requests awaiting budget approval
+    const budgetApprovals = requests.filter(r => r.currentOwnerRole === 'FINANCE' && (r.procurementStage === 'PO_CREATED' || r.procurementStage === 'PO_UPLOADED'));
+
+    // ENTERPRISE: Requests awaiting budget approval
+    const [poDetails, setPoDetails] = useState({});
+
+    useEffect(() => {
+        const fetchPODetails = async () => {
+             const details = {};
+             for (const req of budgetApprovals) {
+                 try {
+                     const po = await apiClient.getPO(req.id);
+                     if (po) details[req.id] = po;
+                 } catch (e) {
+                     console.warn(`Failed to load PO for ${req.id}`, e);
+                 }
+             }
+             setPoDetails(details);
+        };
+        
+        if (budgetApprovals.length > 0) fetchPODetails();
+    }, [budgetApprovals.length]); // Re-run if list changes
 
     const data = [
         { name: 'Jan', value: 4000000 },
@@ -71,7 +94,9 @@ export default function FinanceDashboard() {
                     </h3>
 
                     <div className="space-y-4">
-                        {budgetApprovals.map(req => (
+                        {budgetApprovals.map(req => {
+                            const po = poDetails[req.id];
+                            return (
                             <div key={req.id} className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors">
                                 <div className="flex justify-between items-start mb-3">
                                     <div className="flex-1">
@@ -96,9 +121,36 @@ export default function FinanceDashboard() {
                                             </div>
                                             <div>
                                                 <span className="text-slate-500">Procurement Stage:</span>
-                                                <span className="text-amber-400 ml-2 font-medium">📦 PO CREATED</span>
+                                                <span className="text-amber-400 ml-2 font-medium">📦 {req.procurementStage}</span>
                                             </div>
                                         </div>
+
+                                        {/* Display Extracted PO Details if available */}
+                                        {po && (
+                                            <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+                                                <h5 className="text-xs font-bold text-emerald-400 uppercase mb-2">PO Details Extract</h5>
+                                                <div className="grid grid-cols-3 gap-4 text-xs">
+                                                    <div>
+                                                        <span className="text-slate-400">Vendor:</span>
+                                                        <div className="text-white font-medium">{po.vendor_name || 'N/A'}</div>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-slate-400">Total Cost:</span>
+                                                        {po.total_cost > 0 ? (
+                                                            <div className="text-white font-bold">₹{po.total_cost?.toLocaleString()}</div>
+                                                        ) : (
+                                                            <div className="text-amber-400 font-bold flex items-center gap-1">
+                                                                ⚠️ Manual Entry Req.
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-slate-400">Extracted:</span>
+                                                        <div className="text-slate-300">{new Date(po.created_at).toLocaleDateString()}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -120,7 +172,8 @@ export default function FinanceDashboard() {
                                     </button>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             )}

@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import apiClient from '@/lib/apiClient';
 import { ClipboardList, AlertTriangle, FileCheck, Search, ShieldCheck, PieChart, Users, AlertOctagon, History, FileText, CheckCircle2, XCircle, BarChart3, Lock, Eye, Download, Info } from 'lucide-react';
 
 export default function AuditOfficerDashboard() {
@@ -33,12 +34,28 @@ export default function AuditOfficerDashboard() {
         { id: 'V-098', asset: 'Switch-Core-01', type: 'Weak Password', severity: 'High', owner: 'NetAdmin', status: 'Closed', due: '2023-11-30', capa: 'Enforce MFA', capaStatus: 'Verified' },
     ];
 
-    // 5. Evidence & Logs
-    const auditLogs = [
-        { id: 1, action: 'Scan Completed', target: 'Subnet 192.168.1.0/24', user: 'System', time: '10:30 AM' },
-        { id: 2, action: 'Evidence Uploaded', target: 'V-102 Closure Proof', user: 'Admin', time: '11:15 AM' },
-        { id: 3, action: 'CAPA Approved', target: 'V-098', user: 'Auditor_Jane', time: 'Yesterday' },
-    ];
+    const [auditLogs, setAuditLogs] = useState([]);
+    const [loadingLogs, setLoadingLogs] = useState(true);
+
+    useEffect(() => {
+        const fetchLogs = async () => {
+            try {
+                const logs = await apiClient.getAuditLogs({ limit: 10 });
+                setAuditLogs(logs.map(log => ({
+                    id: log.id,
+                    action: log.action,
+                    target: log.entity_id || 'System',
+                    user: log.performed_by || 'Unknown',
+                    time: new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                })));
+                setLoadingLogs(false);
+            } catch (error) {
+                console.error('Failed to fetch audit logs:', error);
+                setLoadingLogs(false);
+            }
+        };
+        fetchLogs();
+    }, []);
 
     // 6. Report Options
     const reportOptions = [

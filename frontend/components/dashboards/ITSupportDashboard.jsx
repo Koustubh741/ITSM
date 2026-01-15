@@ -62,7 +62,7 @@ export default function ITSupportDashboard() {
     // For now we keep ticket state local if not fully ready or use context if available (Context has tickets).
     // Let's use context tickets!
     // Unified Requests Context - ENTERPRISE WORKFLOW
-    const { requests, itApproveRequest, itRejectRequest, registerByod } = useAssetContext();
+    const { requests, itApproveRequest, itRejectRequest, registerByod, exitRequests, processExitByod } = useAssetContext();
 
     // 1. Incoming Asset Requests (Awaiting IT Management Action)
     const incomingRequests = requests.filter(r => 
@@ -961,6 +961,51 @@ export default function ITSupportDashboard() {
                         </div>
                     )}
 
+                </div>
+            )}
+
+            {/* EXIT WORKFLOW: BYOD De-registration (NEW) */}
+            {exitRequests.filter(r => r.status === 'OPEN' || r.status === 'ASSETS_PROCESSED').length > 0 && (
+                <div className="glass-panel p-6 animate-in slide-in-from-right-4 duration-500">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold text-white flex items-center gap-3">
+                            <ShieldCheck className="text-blue-400" />
+                            BYOD Exit Compliance
+                            <span className="bg-blue-500/10 text-blue-400 text-xs px-2 py-1 rounded-full border border-blue-500/20">
+                                {exitRequests.filter(r => r.status === 'OPEN' || r.status === 'ASSETS_PROCESSED').length} Pending
+                            </span>
+                        </h3>
+                    </div>
+
+                    <div className="space-y-4">
+                        {exitRequests.filter(r => r.status === 'OPEN' || r.status === 'ASSETS_PROCESSED').map(req => (
+                            <div key={req.id} className="p-4 bg-white/5 border border-white/10 rounded-xl flex justify-between items-center group hover:border-blue-500/30 transition-all">
+                                <div>
+                                    <div className="text-white font-bold">{req.user_id}</div>
+                                    <div className="text-xs text-slate-500 flex items-center gap-2 mt-1">
+                                        <Clock size={12} /> Exit Request: {req.id}
+                                    </div>
+                                    <div className="mt-3 flex gap-2">
+                                        {req.byod_snapshot?.map((d, i) => (
+                                            <span key={i} className="text-[10px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded border border-white/5">
+                                                {d.device_model} ({d.serial_number})
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={async () => {
+                                        if (confirm(`Confirm MDM unenrollment and data wipe for BYOD devices belonging to ${req.user_id}?`)) {
+                                            await processExitByod(req.id);
+                                        }
+                                    }}
+                                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-blue-500/20"
+                                >
+                                    De-register BYOD → Success
+                                </button>
+                            </div>
+                        ))}
+                    </div>
                 </div>
             )}
         </div>

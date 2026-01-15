@@ -3,9 +3,10 @@ import Link from 'next/link';
 import {
     ArrowLeft, Server, Database, Globe, Shield, Wifi, Monitor,
     Briefcase, AlertTriangle, CheckCircle, Activity, Play, RefreshCw, XCircle,
-    Info, Layers, Zap
+    Info, Layers, Zap, User
 } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
+import apiClient from '@/lib/apiClient';
 
 export default function CMDBMapPage() {
     const router = useRouter();
@@ -16,47 +17,114 @@ export default function CMDBMapPage() {
     const [showBusinessLayer, setShowBusinessLayer] = useState(false);
     const [selectedNode, setSelectedNode] = useState(null);
     const [simulatingChange, setSimulatingChange] = useState(false);
+    const [loading, setLoading] = useState(true);
+    const [graph, setGraph] = useState({ baseNodes: [], businessNodes: [], baseEdges: [], bizEdges: [] });
 
-    // --- MOCK DATA GENERATOR ---
-    // In a real app, this would be an API call fetching the graph for asset `id`
-    const initialGraph = useMemo(() => {
-        const baseNodes = [
-            { id: 'root', type: 'Server', name: `Primary Asset (${id})`, status: 'Active', x: 400, y: 350, icon: Server, main: true, layer: 'tech' },
-            { id: 'db-01', type: 'Database', name: 'PostgreSQL DB', status: 'Active', x: 200, y: 350, icon: Database, layer: 'tech' },
-            { id: 'net-01', type: 'Network', name: 'Core Switch', status: 'Active', x: 400, y: 500, icon: Wifi, layer: 'tech' },
-            { id: 'svc-auth', type: 'Service', name: 'Auth Service', status: 'Active', x: 600, y: 350, icon: Shield, layer: 'tech' },
-            { id: 'svc-app', type: 'App', name: 'Web Frontend', status: 'Warning', x: 400, y: 200, icon: Globe, layer: 'tech' },
-            { id: 'user-group', type: 'Users', name: 'End Users', status: 'Active', x: 600, y: 200, icon: Monitor, layer: 'tech' },
-        ];
+    useEffect(() => {
+        if (!id) return;
 
-        const businessNodes = [
-            { id: 'biz-fin', type: 'Business', name: 'Finance System', status: 'Active', x: 250, y: 80, icon: Briefcase, layer: 'biz' },
-            { id: 'biz-hr', type: 'Business', name: 'HR Portal', status: 'Active', x: 550, y: 80, icon: Briefcase, layer: 'biz' },
-        ];
+        const loadCMDBData = async () => {
+            setLoading(true);
+            try {
+                // Fetch the primary asset
+                const mainAsset = await apiClient.getAsset(id);
+                
+                // Fetch some context (other assets and users)
+                const [allAssets, allUsers] = await Promise.all([
+                    apiClient.getAssets({ limit: 10 }),
+                    apiClient.getUsers().catch(() => []) // Fallback if 403
+                ]);
 
-        // Edges: source -> target (Dependency Direction: source depends on target, or flow?)
-        // Let's define: Source IMPACTS Target. (Failure in Source -> Failure in Target)
-        // Root (Server) -> Hosts -> App
-        // DB -> Supports -> App
-        // Switch -> Connects -> Root
-        // App -> Served To -> Users
-        // App -> Supports -> Business Functions
+                const baseNodes = [];
+                const baseEdges = [];
+                const businessNodes = [];
+                const bizEdges = [];
 
-        const baseEdges = [
-            { source: 'net-01', target: 'root', type: 'Connects', label: 'Uplink' },
-            { source: 'db-01', target: 'svc-app', type: 'Supports', label: 'Data' },
-            { source: 'root', target: 'svc-app', type: 'Hosts', label: 'Runtime' },
-            { source: 'svc-auth', target: 'svc-app', type: 'Secures', label: 'Auth' },
-            { source: 'svc-app', target: 'user-group', type: 'Serves', label: 'Access' },
-        ];
+                // 1. Root Node (The specific asset)
+                const rootNode = {
+                    id: 'root',
+                    realId: mainAsset.id,
+                    type: mainAsset.type,
+                    name: mainAsset.name,
+                    status: mainAsset.status === 'Active' ? 'Active' : 'Warning',
+                    x: 400,
+                    y: 350,
+                    icon: Server,
+                    main: true,
+                    layer: 'tech',
+                    details: mainAsset
+                };
+                baseNodes.push(rootNode);
 
-        const bizEdges = [
-            { source: 'svc-app', target: 'biz-fin', type: 'Powers', label: 'Critical' },
-            { source: 'svc-app', target: 'biz-hr', type: 'Powers', label: 'Standard' },
-        ];
+                // 2. Assigned User Node
+                if (mainAsset.assigned_to && mainAsset.assigned_to !== 'Unassigned') {
+                    baseNodes.push({
+                        id: 'user-assigned',
+                        type: 'User',
+                        name: mainAsset.assigned_to,
+                        status: 'Active',
+                        x: 600,
+                        y: 200,
+                        icon: User,
+                        layer: 'tech'
+                    });
+                    baseEdges.push({ source: 'root', target: 'user-assigned', type: 'Assigned To', label: 'Owner' });
+                }
 
-        return { baseNodes, businessNodes, baseEdges, bizEdges };
+                // 3. Infrastructure Nodes (Mocking connections to real assets)
+                const dbAsset = allAssets.find(a => a.type?.toLowerCase().includes('database') || a.name?.toLowerCase().includes('db'));
+                if (dbAsset) {
+                    baseNodes.push({
+                        id: 'db-node',
+                        realId: dbAsset.id,
+                        type: 'Database',
+                        name: dbAsset.name,
+                        status: dbAsset.status === 'Active' ? 'Active' : 'Warning',
+                        x: 200,
+                        y: 350,
+                        icon: Database,
+                        layer: 'tech'
+                    });
+                    baseEdges.push({ source: 'db-node', target: 'root', type: 'Supports', label: 'Data' });
+                } else {
+                    // Fallback mock if no DB in DB
+                    baseNodes.push({ id: 'db-mock', type: 'Database', name: 'PostgreSQL Cluster', status: 'Active', x: 200, y: 350, icon: Database, layer: 'tech' });
+                    baseEdges.push({ source: 'db-mock', target: 'root', type: 'Supports', label: 'Data' });
+                }
+
+                // 4. Network Node (Linked to Location)
+                baseNodes.push({
+                    id: 'net-node',
+                    type: 'Network',
+                    name: mainAsset.location || 'Default Network',
+                    status: 'Active',
+                    x: 400,
+                    y: 500,
+                    icon: Wifi,
+                    layer: 'tech'
+                });
+                baseEdges.push({ source: 'net-node', target: 'root', type: 'Connects', label: 'Uplink' });
+
+                // 5. Business Layer (Portal, Finance, etc.)
+                businessNodes.push({ id: 'biz-app', type: 'Service', name: 'Enterprise Portal', status: 'Active', x: 400, y: 150, icon: Globe, layer: 'biz' });
+                bizEdges.push({ source: 'root', target: 'biz-app', type: 'Powers', label: 'Critical' });
+                
+                businessNodes.push({ id: 'biz-fin', type: 'Business', name: 'Financial Operations', status: 'Active', x: 200, y: 80, icon: Briefcase, layer: 'biz' });
+                bizEdges.push({ source: 'biz-app', target: 'biz-fin', type: 'Enables', label: 'Revenue' });
+
+                setGraph({ baseNodes, businessNodes, baseEdges, bizEdges });
+            } catch (error) {
+                console.error('Failed to build CMDB graph:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        loadCMDBData();
     }, [id]);
+
+    // Graph Data Accessors
+    const initialGraph = graph;
 
 
     // --- DERIVED STATE ---
@@ -168,6 +236,27 @@ export default function CMDBMapPage() {
         setSelectedNode(id === selectedNode ? null : id);
         if (viewMode === 'risk') setSimulatingChange(true);
     };
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-[#0B1120] flex flex-col items-center justify-center space-y-4">
+                <div className="p-4 rounded-full bg-blue-500/10 animate-pulse">
+                    <Activity size={48} className="text-blue-500" />
+                </div>
+                <p className="text-slate-400 font-mono text-sm animate-pulse">Mapping infrastructure dependencies...</p>
+            </div>
+        );
+    }
+
+    if (graph.baseNodes.length === 0) {
+        return (
+            <div className="min-h-screen bg-[#0B1120] flex flex-col items-center justify-center space-y-4">
+                <AlertCircle size={48} className="text-rose-500" />
+                <p className="text-slate-100 font-bold">Failed to build configuration map</p>
+                <Link href="/enterprise" className="text-blue-400 hover:text-blue-300 text-sm">Return to Portal</Link>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden">
