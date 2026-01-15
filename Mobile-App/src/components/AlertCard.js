@@ -5,7 +5,16 @@ import { Colors } from '../constants/colors';
 import { Spacing, BorderRadius } from '../constants/spacing';
 import { Typography } from '../constants/typography';
 
-const AlertCard = ({ icon: IconComponent, iconColor, title, time, description, action, delay = 0 }) => {
+const AlertCard = ({
+  icon: IconComponent,
+  iconColor,
+  title,
+  time,
+  description,
+  action,
+  onActionPress,
+  delay = 0,
+}) => {
   return (
     <Animated.View entering={FadeInUp.delay(delay).duration(400)}>
       <TouchableOpacity style={styles.card} activeOpacity={0.7}>
@@ -26,7 +35,10 @@ const AlertCard = ({ icon: IconComponent, iconColor, title, time, description, a
               </Text>
             )}
             {action && (
-              <TouchableOpacity style={styles.actionButton}>
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={onActionPress}
+                activeOpacity={0.7}>
                 <Text style={styles.actionText}>{action}</Text>
               </TouchableOpacity>
             )}
