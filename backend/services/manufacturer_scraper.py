@@ -244,7 +244,13 @@ def fetch_asset_from_url(url: str) -> Dict:
     """
     try:
         parsed = urlparse(url)
-        hostname = parsed.netloc.lower()
+        hostname = (parsed.hostname or "").lower()
+
+        # Basic SSRF protection: block localhost and direct IP addresses
+        if not hostname:
+            raise ValueError("Invalid URL")
+        if hostname in ("localhost", "127.0.0.1") or re.match(r"^\d{1,3}(\.\d{1,3}){3}$", hostname):
+            raise ValueError("Blocked URL host")
         
         if 'lenovo' in hostname:
             return scrape_lenovo_website(url)
