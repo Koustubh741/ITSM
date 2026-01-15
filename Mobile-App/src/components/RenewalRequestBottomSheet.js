@@ -105,7 +105,9 @@ const RenewalRequestBottomSheet = ({ visible, onClose, onSubmit }) => {
   const handleBackdropPress = () => {
     translateY.value = withTiming(SCREEN_HEIGHT, { duration: 300 });
     opacity.value = withTiming(0, { duration: 300 }, () => {
-      runOnJS(onClose)();
+      if (onClose) {
+        runOnJS(onClose)();
+      }
     });
   };
 
