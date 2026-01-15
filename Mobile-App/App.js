@@ -59,15 +59,21 @@ function App() {
       return;
     }
 
-    const userRole = user.role?.toUpperCase() || user.role;
-    const userPosition = user.position?.toUpperCase() || user.position;
+    const normalizedRole =
+      typeof user.role === 'string'
+        ? user.role.toUpperCase().replace(/\s+/g, '_')
+        : user.role;
+    const normalizedPosition =
+      typeof user.position === 'string'
+        ? user.position.toUpperCase().replace(/\s+/g, '_')
+        : user.position;
 
     // Check if user is "User" role with position
-    if (userRole === 'USER' || userRole === 'END_USER') {
+    if (normalizedRole === 'USER' || normalizedRole === 'END_USER') {
       // Check position for User role
-      if (userPosition === 'TEAM_MEMBER') {
+      if (normalizedPosition === 'TEAM_MEMBER') {
         setCurrentScreen('endUser');
-      } else if (userPosition === 'MANAGER') {
+      } else if (normalizedPosition === 'MANAGER') {
         setCurrentScreen('endUserManager');
       } else {
         // Default to EndUserScreen for END_USER role without position or other variations
