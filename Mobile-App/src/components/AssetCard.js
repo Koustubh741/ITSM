@@ -116,11 +116,15 @@ const AssetCard = ({ asset, onPress, onViewDetails }) => {
                 <View style={styles.assignedContainer}>
                   <View style={styles.avatar}>
                     <Text style={styles.avatarText}>
-                      {asset.assignedTo
-                        .split(' ')
-                        .map((n) => n[0])
-                        .join('')
-                        .toUpperCase()}
+                      {typeof asset.assignedTo === 'string'
+                        ? asset.assignedTo
+                            .trim()
+                            .split(/\s+/)
+                            .filter(Boolean)
+                            .map((n) => n[0])
+                            .join('')
+                            .toUpperCase()
+                        : ''}
                     </Text>
                   </View>
                   <Text style={styles.detailValue}>{asset.assignedTo}</Text>
