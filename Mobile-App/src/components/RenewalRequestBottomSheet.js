@@ -73,8 +73,9 @@ const RenewalRequestBottomSheet = ({ visible, onClose, onSubmit }) => {
       onPanResponderRelease: (evt, gestureState) => {
         const velocity = gestureState.vy;
         if (gestureState.dy > DRAG_THRESHOLD || velocity > 0.5) {
-          translateY.value = withTiming(SCREEN_HEIGHT, { duration: 300 });
-          opacity.value = withTiming(0, { duration: 300 }, () => {
+          if (onClose) {
+            runOnJS(onClose)();
+          }
             runOnJS(onClose)();
           });
         } else if (gestureState.dy < -DRAG_THRESHOLD || velocity < -0.5) {
