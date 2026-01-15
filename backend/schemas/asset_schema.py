@@ -70,5 +70,31 @@ class AssetAssignmentRequest(BaseModel):
     assignment_date: Optional[date] = None
 
 
+from pydantic import field_validator
+from urllib.parse import urlparse
+import ipaddress
+
 class URLRequest(BaseModel):
     url: str
+
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, v: str) -> str:
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("URL must start with http:// or https://")
+
+        host = parsed.hostname
+        if not host:
+            raise ValueError("URL must include a hostname")
+
+        try:
+            ip = ipaddress.ip_address(host)
+            if ip.is_private or ip.is_loopback or ip.is_link_local:
+                raise ValueError("Private or loopback IP addresses are not allowed")
+        except ValueError:
+            # Not an IP address; reject obvious local hostnames
+            if host in ("localhost",):
+                raise ValueError("Local hostnames are not allowed")
+
+        return v
