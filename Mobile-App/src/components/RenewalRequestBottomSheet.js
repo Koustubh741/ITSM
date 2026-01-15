@@ -128,7 +128,13 @@ const RenewalRequestBottomSheet = ({ visible, onClose, onSubmit }) => {
   };
 
   const formatCurrency = (value) => {
-    const numericValue = value.replace(/[^0-9.]/g, '');
+    // Normalize common decimal separators: treat a single comma as decimal if no dot is present
+    let normalizedValue = value;
+    if (normalizedValue.includes(',') && !normalizedValue.includes('.')) {
+      normalizedValue = normalizedValue.replace(',', '.');
+    }
+
+    const numericValue = normalizedValue.replace(/[^0-9.]/g, '');
     const parts = numericValue.split('.');
     if (parts.length > 2) {
       return parts[0] + '.' + parts.slice(1).join('');
