@@ -132,7 +132,7 @@ const AssetCard = ({ asset, onPress, onViewDetails }) => {
               </View>
             )}
 
-            {asset.cost && (
+            {asset.cost !== null && asset.cost !== undefined && (
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>COST</Text>
                 <Text style={styles.detailValue}>{asset.cost}</Text>
