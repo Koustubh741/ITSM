@@ -8,6 +8,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -20,11 +21,20 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AnimatedInput from '../components/AnimatedInput';
 import Dropdown from '../components/Dropdown';
+import SuccessPopup from '../components/SuccessPopup';
 import { Colors } from '../constants/colors';
 import { Typography } from '../constants/typography';
 import { Spacing, BorderRadius } from '../constants/spacing';
 
-const SignUpScreen = ({ navigation, onBack, onSignUpSuccess }) => {
+// API Base URL - Update this to match your backend server
+// For Android Emulator: use 'http://10.0.2.2:8000'
+// For iOS Simulator: use 'http://localhost:8000' or 'http://127.0.0.1:8000'
+// For Physical Device: use your computer's IP address
+const API_BASE_URL = __DEV__ 
+  ? 'http://192.168.0.25:8000'  // Physical device - your laptop IP
+  : 'https://your-production-api.com';  // Production URL
+
+const SignUpScreen = ({ navigation, onBack, onSignUpSuccess, onSignUpToLogin }) => {
   const [formData, setFormData] = useState({
     fullName: '',
     workEmail: '',
@@ -32,43 +42,233 @@ const SignUpScreen = ({ navigation, onBack, onSignUpSuccess }) => {
     confirmPassword: '',
     role: '',
     position: '',
+    domain: '',
+    company: '',
     location: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const [errors, setErrors] = useState({});
 
   const buttonScale = useSharedValue(1);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => {
       const updated = { ...prev, [field]: value };
-      // Reset position when role changes to something other than "User"
-      if (field === 'role' && value !== 'User') {
+      // Reset position and domain when role changes to something other than "End User"
+      if (field === 'role' && value !== 'End User') {
         updated.position = '';
+        updated.domain = '';
       }
       return updated;
     });
+    // Clear error for this field when user starts typing
+    if (errors[field]) {
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
   };
 
-  const handlePositionSelect = (position) => {
-    setFormData((prev) => ({ ...prev, position }));
+  const validateForm = () => {
+    const newErrors = {};
+
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = 'Full name is required';
+    }
+
+    if (!formData.workEmail.trim()) {
+      newErrors.workEmail = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.workEmail)) {
+      newErrors.workEmail = 'Email is invalid';
+    }
+
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
+    }
+
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (!formData.role) {
+      newErrors.role = 'Role is required';
+    }
+
+    if (!formData.company.trim()) {
+      newErrors.company = 'Company name is required';
+    }
+
+    if (!formData.location) {
+      newErrors.location = 'Location is required';
+    }
+
+    // Validate End User specific fields
+    if (formData.role === 'End User') {
+      if (!formData.position) {
+        newErrors.position = 'Position is required';
+      }
+      if (!formData.domain) {
+        newErrors.domain = 'Domain is required';
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleCreateAccount = () => {
+  // Map role from UI to backend format
+  const mapRoleToBackend = (role) => {
+    const roleMap = {
+      'Admin': 'ADMIN',
+      'Manager': 'MANAGER',
+      'End User': 'END_USER',
+      'Viewer': 'VIEWER',
+    };
+    return roleMap[role] || 'END_USER';
+  };
+
+  // Map position from UI to backend format
+  const mapPositionToBackend = (position) => {
+    const positionMap = {
+      'Team Member': 'TEAM_MEMBER',
+      'Manager': 'MANAGER',
+    };
+    return positionMap[position] || null;
+  };
+
+  // Map domain from UI to backend format
+  const mapDomainToBackend = (domain) => {
+    const domainMap = {
+      'Cloud': 'CLOUD',
+      'DATA-AI': 'DATA_AI',
+      'Security': 'SECURITY',
+    };
+    return domainMap[domain] || null;
+  };
+
+  const handleCreateAccount = async () => {
+    // Validate form
+    if (!validateForm()) {
+      Alert.alert('Validation Error', 'Please fill in all required fields correctly.');
+      return;
+    }
+
     buttonScale.value = withSequence(
       withTiming(0.95, { duration: 100 }),
       withTiming(1, { duration: 100 })
     );
+    
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      if (onSignUpSuccess) {
-        onSignUpSuccess();
-      } else if (navigation) {
-        navigation.navigate('login');
+    setErrors({});
+
+    try {
+      // Prepare data for API
+      const registrationData = {
+        email: formData.workEmail.trim(),
+        password: formData.password,
+        full_name: formData.fullName.trim(),
+        role: mapRoleToBackend(formData.role),
+        company: formData.company.trim(),
+        location: formData.location,
+        phone: formData.phone || null,
+        department: formData.department || null,
+      };
+
+      // Add End User specific fields
+      if (formData.role === 'End User') {
+        registrationData.position = mapPositionToBackend(formData.position);
+        registrationData.domain = mapDomainToBackend(formData.domain);
       }
-    }, 1000);
+
+      // Log the request for debugging
+      console.log('Registering user:', {
+        url: `${API_BASE_URL}/auth/register`,
+        data: { ...registrationData, password: '***' }, // Hide password in logs
+      });
+
+      // Call register API
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(registrationData),
+      });
+
+      console.log('Response status:', response.status);
+
+      // Try to parse JSON response
+      let data;
+      try {
+        const text = await response.text();
+        console.log('Response text:', text);
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error('Invalid response from server. Please check if backend is running.');
+      }
+
+      if (!response.ok) {
+        const errorMessage = data.detail || data.message || `Server error: ${response.status}`;
+        console.error('Registration failed:', errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      console.log('Registration successful:', data);
+
+      // Success - Show popup
+      setLoading(false);
+      setShowSuccessPopup(true);
+
+      // Auto navigate to login after popup
+      setTimeout(() => {
+        setShowSuccessPopup(false);
+        if (onSignUpSuccess) {
+          onSignUpSuccess();
+        } else if (navigation) {
+          navigation.navigate('login');
+        }
+      }, 2500); // 2.5 seconds (popup shows for 2 seconds, then navigate)
+
+    } catch (error) {
+      setLoading(false);
+      console.error('Registration error:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Unable to create account. Please try again.';
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.name === 'TypeError' && error.message.includes('Network request failed')) {
+        errorMessage = `Network request failed. Please check:\n\n1. Backend server is running\n2. Server is accessible at ${API_BASE_URL}\n3. Phone and laptop are on same Wi-Fi\n4. Firewall is not blocking port 8000`;
+      } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        errorMessage = `Cannot connect to server at ${API_BASE_URL}\n\nPlease verify:\n- Backend is running with: uvicorn main:app --host 0.0.0.0 --port 8000\n- IP address is correct: 192.168.0.25`;
+      }
+      
+      Alert.alert(
+        'Registration Failed',
+        errorMessage,
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
+  const handleClosePopup = () => {
+    setShowSuccessPopup(false);
+    if (onSignUpSuccess) {
+      onSignUpSuccess();
+    } else if (navigation) {
+      navigation.navigate('login');
+    }
   };
 
   const handleBack = () => {
@@ -77,12 +277,16 @@ const SignUpScreen = ({ navigation, onBack, onSignUpSuccess }) => {
   };
 
   const handleLogin = () => {
-    if (navigation) {
+    if (onSignUpToLogin) {
+      onSignUpToLogin();
+    } else if (navigation) {
       navigation.navigate('login');
     }
   };
 
-  const roles = ['Admin', 'Manager', 'User', 'Viewer'];
+  const roles = ['Admin', 'Manager', 'End User', 'Viewer'];
+  const positions = ['Team Member', 'Manager'];
+  const domains = ['Cloud', 'DATA-AI', 'Security'];
   const locations = ['New York', 'London', 'Tokyo', 'San Francisco', 'Berlin'];
 
   const buttonStyle = useAnimatedStyle(() => ({
@@ -118,54 +322,74 @@ const SignUpScreen = ({ navigation, onBack, onSignUpSuccess }) => {
 
           <Animated.View entering={FadeInUp.delay(200).duration(600)}>
             <View style={styles.form}>
-              <AnimatedInput
-                label="FULL NAME"
-                placeholder="John Doe"
-                value={formData.fullName}
-                onChangeText={(value) => handleInputChange('fullName', value)}
-                autoCapitalize="words"
-              />
+              <View>
+                <AnimatedInput
+                  label="FULL NAME"
+                  placeholder="John Doe"
+                  value={formData.fullName}
+                  onChangeText={(value) => handleInputChange('fullName', value)}
+                  autoCapitalize="words"
+                />
+                {errors.fullName && (
+                  <Text style={styles.errorText}>{errors.fullName}</Text>
+                )}
+              </View>
 
-              <AnimatedInput
-                label="WORK EMAIL"
-                placeholder="john.doe@company.com"
-                value={formData.workEmail}
-                onChangeText={(value) => handleInputChange('workEmail', value)}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+              <View>
+                <AnimatedInput
+                  label="WORK EMAIL"
+                  placeholder="john.doe@company.com"
+                  value={formData.workEmail}
+                  onChangeText={(value) => handleInputChange('workEmail', value)}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                {errors.workEmail && (
+                  <Text style={styles.errorText}>{errors.workEmail}</Text>
+                )}
+              </View>
 
-              <AnimatedInput
-                label="PASSWORD"
-                placeholder="••••••••"
-                value={formData.password}
-                onChangeText={(value) => handleInputChange('password', value)}
-                secureTextEntry={!showPassword}
-                rightIcon={
-                  <TouchableOpacity
-                    onPress={() => setShowPassword(!showPassword)}
-                    style={styles.iconButton}>
-                    <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️'}</Text>
-                  </TouchableOpacity>
-                }
-              />
+              <View>
+                <AnimatedInput
+                  label="PASSWORD"
+                  placeholder="••••••••"
+                  value={formData.password}
+                  onChangeText={(value) => handleInputChange('password', value)}
+                  secureTextEntry={!showPassword}
+                  rightIcon={
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.iconButton}>
+                      <Text style={styles.eyeIcon}>{showPassword ? '👁️' : '👁️'}</Text>
+                    </TouchableOpacity>
+                  }
+                />
+                {errors.password && (
+                  <Text style={styles.errorText}>{errors.password}</Text>
+                )}
+              </View>
 
-              <AnimatedInput
-                label="CONFIRM PASSWORD"
-                placeholder="••••••••"
-                value={formData.confirmPassword}
-                onChangeText={(value) => handleInputChange('confirmPassword', value)}
-                secureTextEntry={!showConfirmPassword}
-                rightIcon={
-                  <TouchableOpacity
-                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                    style={styles.iconButton}>
-                    <Text style={styles.eyeIcon}>
-                      {showConfirmPassword ? '👁️' : '👁️'}
-                    </Text>
-                  </TouchableOpacity>
-                }
-              />
+              <View>
+                <AnimatedInput
+                  label="CONFIRM PASSWORD"
+                  placeholder="••••••••"
+                  value={formData.confirmPassword}
+                  onChangeText={(value) => handleInputChange('confirmPassword', value)}
+                  secureTextEntry={!showConfirmPassword}
+                  rightIcon={
+                    <TouchableOpacity
+                      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                      style={styles.iconButton}>
+                      <Text style={styles.eyeIcon}>
+                        {showConfirmPassword ? '👁️' : '👁️'}
+                      </Text>
+                    </TouchableOpacity>
+                  }
+                />
+                {errors.confirmPassword && (
+                  <Text style={styles.errorText}>{errors.confirmPassword}</Text>
+                )}
+              </View>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>ROLE</Text>
@@ -175,47 +399,58 @@ const SignUpScreen = ({ navigation, onBack, onSignUpSuccess }) => {
                   onSelect={(value) => handleInputChange('role', value)}
                   placeholder="Select your role"
                 />
+                {errors.role && (
+                  <Text style={styles.errorText}>{errors.role}</Text>
+                )}
               </View>
 
-              {/* Position Selection - Only show when role is "User" */}
-              {formData.role === 'User' && (
-                <Animated.View 
-                  entering={FadeInUp.delay(300).duration(400)}
-                  style={styles.inputGroup}>
-                  <Text style={styles.label}>POSITION</Text>
-                  <View style={styles.positionContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.positionOption,
-                        formData.position === 'Team Member' && styles.positionOptionSelected,
-                      ]}
-                      onPress={() => handlePositionSelect('Team Member')}
-                      activeOpacity={0.8}>
-                      <Text
-                        style={[
-                          styles.positionOptionText,
-                          formData.position === 'Team Member' && styles.positionOptionTextSelected,
-                        ]}>
-                        Team Member
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.positionOption,
-                        formData.position === 'Manager' && styles.positionOptionSelected,
-                      ]}
-                      onPress={() => handlePositionSelect('Manager')}
-                      activeOpacity={0.8}>
-                      <Text
-                        style={[
-                          styles.positionOptionText,
-                          formData.position === 'Manager' && styles.positionOptionTextSelected,
-                        ]}>
-                        Manager
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                </Animated.View>
+              {/* Company Name - Always visible */}
+              <View>
+                <AnimatedInput
+                  label="COMPANY NAME"
+                  placeholder="Enter company name"
+                  value={formData.company}
+                  onChangeText={(value) => handleInputChange('company', value)}
+                  autoCapitalize="words"
+                />
+                {errors.company && (
+                  <Text style={styles.errorText}>{errors.company}</Text>
+                )}
+              </View>
+
+              {/* Position and Domain - Only show when role is "End User" */}
+              {formData.role === 'End User' && (
+                <>
+                  <Animated.View 
+                    entering={FadeInUp.delay(300).duration(400)}
+                    style={styles.inputGroup}>
+                    <Text style={styles.label}>POSITION</Text>
+                    <Dropdown
+                      options={positions}
+                      selected={formData.position}
+                      onSelect={(value) => handleInputChange('position', value)}
+                      placeholder="Select position"
+                    />
+                    {errors.position && (
+                      <Text style={styles.errorText}>{errors.position}</Text>
+                    )}
+                  </Animated.View>
+
+                  <Animated.View 
+                    entering={FadeInUp.delay(350).duration(400)}
+                    style={styles.inputGroup}>
+                    <Text style={styles.label}>DOMAIN</Text>
+                    <Dropdown
+                      options={domains}
+                      selected={formData.domain}
+                      onSelect={(value) => handleInputChange('domain', value)}
+                      placeholder="Select domain"
+                    />
+                    {errors.domain && (
+                      <Text style={styles.errorText}>{errors.domain}</Text>
+                    )}
+                  </Animated.View>
+                </>
               )}
 
               <View style={styles.inputGroup}>
@@ -226,6 +461,9 @@ const SignUpScreen = ({ navigation, onBack, onSignUpSuccess }) => {
                   onSelect={(value) => handleInputChange('location', value)}
                   placeholder="Select city/office"
                 />
+                {errors.location && (
+                  <Text style={styles.errorText}>{errors.location}</Text>
+                )}
               </View>
 
               <Animated.View style={buttonStyle}>
@@ -254,6 +492,14 @@ const SignUpScreen = ({ navigation, onBack, onSignUpSuccess }) => {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Success Popup */}
+      <SuccessPopup
+        visible={showSuccessPopup}
+        message="Registration Successful"
+        onClose={handleClosePopup}
+        autoCloseDelay={2000}
+      />
     </SafeAreaView>
   );
 };
@@ -333,38 +579,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: Spacing.xs,
   },
-  positionContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  positionOption: {
-    flex: 1,
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.lg,
-    borderRadius: BorderRadius.md,
-    backgroundColor: Colors.white,
-    borderWidth: 1.5,
-    borderColor: Colors.warmBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: Spacing.sm,
-  },
-  positionOptionLast: {
-    marginRight: 0,
-  },
-  positionOptionSelected: {
-    backgroundColor: Colors.orange,
-    borderColor: Colors.orange,
-  },
-  positionOptionText: {
-    ...Typography.body,
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.warmText,
-  },
-  positionOptionTextSelected: {
-    color: Colors.white,
-  },
   iconButton: {
     padding: Spacing.xs,
   },
@@ -424,6 +638,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.orange,
+  },
+  errorText: {
+    ...Typography.caption,
+    fontSize: 11,
+    color: Colors.danger,
+    marginTop: Spacing.xs,
+    marginLeft: Spacing.xs,
   },
 });
 

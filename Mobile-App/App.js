@@ -83,6 +83,10 @@ function App() {
     setCurrentScreen('signup');
   };
 
+  const handleLoginFromSignUp = () => {
+    setCurrentScreen('login');
+  };
+
   const renderScreen = () => {
     switch (currentScreen) {
       case 'splash':
@@ -107,7 +111,7 @@ function App() {
           <SignUpScreen
             onBack={handleSignUpBack}
             onSignUpSuccess={handleSignUpSuccess}
-            onSignUpToLogin={handleSignUpFromLogin}
+            onSignUpToLogin={handleLoginFromSignUp}
           />
         );
       case 'login':

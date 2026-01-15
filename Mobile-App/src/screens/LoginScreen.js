@@ -17,15 +17,27 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AnimatedInput from '../components/AnimatedInput';
+import InfoPopup from '../components/InfoPopup';
 import { Colors } from '../constants/colors';
 import { Spacing, BorderRadius } from '../constants/spacing';
 import { Typography } from '../constants/typography';
+
+// API Base URL - Same as SignUpScreen
+const API_BASE_URL = __DEV__ 
+  ? 'http://192.168.0.25:8000'  // Physical device - your laptop IP
+  : 'https://your-production-api.com';  // Production URL
 
 const LoginScreen = ({ navigation, onLoginSuccess }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
+  const [showInfoPopup, setShowInfoPopup] = useState(false);
+  const [popupConfig, setPopupConfig] = useState({
+    type: 'info',
+    title: '',
+    message: '',
+  });
 
   const validateForm = () => {
     const newErrors = {};
@@ -38,9 +50,7 @@ const LoginScreen = ({ navigation, onLoginSuccess }) => {
 
     if (!password) {
       newErrors.password = 'Password is required';
-    } else if (password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
+    } 
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -52,15 +62,107 @@ const LoginScreen = ({ navigation, onLoginSuccess }) => {
     }
 
     setLoading(true);
-    // Simulate API call - replace with actual API call
-    setTimeout(() => {
-      setLoading(false);
-      if (onLoginSuccess) {
-        onLoginSuccess();
-      } else if (navigation) {
-        navigation.navigate('main');
+    setErrors({});
+
+    try {
+      console.log('Attempting login for:', email);
+      console.log('API URL:', `${API_BASE_URL}/auth/login`);
+
+      // Create form data for OAuth2PasswordRequestForm
+      const formData = new URLSearchParams();
+      formData.append('username', email.trim());
+      formData.append('password', password);
+
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
+      });
+
+      console.log('Response status:', response.status);
+
+      // Parse response
+      let data;
+      try {
+        const text = await response.text();
+        console.log('Response text:', text);
+        data = text ? JSON.parse(text) : {};
+      } catch (parseError) {
+        console.error('Failed to parse response:', parseError);
+        throw new Error('Invalid response from server.');
       }
-    }, 1000);
+
+      if (!response.ok) {
+        // Check if account is not verified
+        const errorMessage = data.detail || 'Login failed';
+        console.log('Login error:', errorMessage);
+
+        if (errorMessage.includes('not active') || errorMessage.includes('not verified')) {
+          // Show popup for unverified account
+          setLoading(false);
+          setPopupConfig({
+            type: 'warning',
+            title: 'Account Not Verified',
+            message: 'Your account is not verified by the administrator yet. Please contact your administrator for activation.',
+          });
+          setShowInfoPopup(true);
+          return;
+        }
+
+        throw new Error(errorMessage);
+      }
+
+      console.log('Login successful:', data);
+
+      // Extract user info
+      const user = data.user;
+      const accessToken = data.access_token;
+
+      // Store user data (you might want to use AsyncStorage or context)
+      // For now, we'll pass it through navigation params
+
+      setLoading(false);
+
+      // Navigate based on role and position
+      navigateBasedOnRole(user);
+
+    } catch (error) {
+      setLoading(false);
+      console.error('Login error:', error);
+
+      // Show error popup or alert
+      if (error.message.includes('Network request failed')) {
+        Alert.alert(
+          'Connection Error',
+          `Cannot connect to server.\n\nPlease check:\n- Backend is running\n- IP address is correct: 192.168.0.25\n- Both devices on same Wi-Fi`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Login Failed',
+          error.message || 'Unable to login. Please check your credentials.',
+          [{ text: 'OK' }]
+        );
+      }
+    }
+  };
+
+  const navigateBasedOnRole = (user) => {
+    const role = user.role;
+    const position = user.position;
+
+    console.log('Navigating based on role:', role, 'position:', position);
+
+    // Call onLoginSuccess with user data - App.js handles the navigation
+    if (onLoginSuccess) {
+      onLoginSuccess(user);
+    }
+  };
+
+  const handleClosePopup = () => {
+    setShowInfoPopup(false);
   };
 
   const navigateToSignup = () => {
@@ -152,6 +254,16 @@ const LoginScreen = ({ navigation, onLoginSuccess }) => {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Info Popup for unverified account */}
+      <InfoPopup
+        visible={showInfoPopup}
+        type={popupConfig.type}
+        title={popupConfig.title}
+        message={popupConfig.message}
+        onClose={handleClosePopup}
+        showCloseButton={true}
+      />
     </SafeAreaView>
   );
 };
