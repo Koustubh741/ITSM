@@ -1,0 +1,36 @@
+{
+  "serial_number": "MP2J0D13",
+  "hostname": "LAPTOP-JHTTQ3PC",
+  "asset_metadata": {
+    "type": "WINDOWS_SERVER",
+    "condition": "Healthy",
+    "last_seen": "2026-01-13T16:31:37.051905",
+    "location": "Datacenter-1"
+  },
+  "hardware": {
+    "manufacturer": "LENOVO",
+    "model": "83GS",
+    "processor": {
+      "name": "Intel64 Family 6 Model 151 Stepping 2, GenuineIntel",
+      "cores": 12,
+      "physical_cores": 8
+    },
+    "ram": {
+      "total_gb": 15.71
+    },
+    "storage": {
+      "total_gb": 474.72
+    }
+  },
+  "os": {
+    "name": "Windows",
+    "version": "10.0.26100",
+    "release": "10",
+    "architecture": "AMD64"
+  },
+  "usage": {
+    "cpu_percent": 20.4,
+    "ram_percent": 84.3,
+    "disk_percent": 61.5
+  }
+}

@@ -32,9 +32,11 @@ async def handle_po_upload(db: AsyncSession, asset_request_id: UUID, uploader_id
         total_cost=extracted.get("total_cost"),
         quantity=extracted.get("quantity"),
         unit_price=extracted.get("unit_price"),
-        extracted_data=extracted,
+        product_details=extracted.get("product_details"), # Full line items JSON
+        extracted_data=extracted, # Full raw metadata/text JSON
         status="UPLOADED"
     )
+
     db.add(po)
     
     # Comprehensive Audit Log

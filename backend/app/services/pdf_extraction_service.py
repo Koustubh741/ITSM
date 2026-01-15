@@ -18,12 +18,20 @@ def extract_po_details(file_path: str, debug: bool = False) -> Dict[str, Any]:
     """
     results = {
         "vendor_name": "Unknown Vendor",
-        "product_details": "Generated from PDF extraction",
+        "product_details": [], # Changed to list for line items
         "quantity": 1,
         "unit_price": 0.0,
         "total_cost": 0.0,
+        "subtotal": 0.0,
+        "tax_amount": 0.0,
+        "shipping_cost": 0.0,
+        "currency": "USD",
+        "po_number": None,
+        "invoice_number": None,
         "purchase_date": None,
-        "confidence_score": 0.0
+        "confidence_score": 0.0,
+        "metadata": {},
+        "raw_text": ""
     }
     
     if not os.path.exists(file_path):
@@ -34,230 +42,120 @@ def extract_po_details(file_path: str, debug: bool = False) -> Dict[str, Any]:
     try:
         reader = pypdf.PdfReader(file_path)
         
-        if debug:
-            print(f"\n{'='*80}")
-            print(f"PDF Extraction Debug for: {file_path}")
-            print(f"{'='*80}")
-            print(f"Number of pages: {len(reader.pages)}")
-        
-        # STEP 1: Extract metadata (can contain vendor, date info)
+        # STEP 1: Enhanced Metadata Capture
+        if reader.metadata:
+            results["metadata"] = {str(k): str(v) for k, v in reader.metadata.items()}
+            
         meta = reader.metadata
         if meta and debug:
             print(f"\n--- Metadata ---")
-            print(f"Title: {meta.title}")
-            print(f"Author: {meta.author}")
-            print(f"Subject: {meta.subject}")
-            print(f"Creator: {meta.creator}")
-            print(f"Producer: {meta.producer}")
+            for k, v in results["metadata"].items():
+                print(f"{k}: {v}")
         
-        # Try to get vendor from metadata author field
         if meta and meta.author and len(str(meta.author).strip()) > 2:
             author_clean = str(meta.author).strip()
             if author_clean.lower() not in ['details', 'name', 'unknown', 'user']:
                 results["vendor_name"] = author_clean
-                results["confidence_score"] += 0.2
-                if debug:
-                    print(f"✓ Vendor from metadata: {author_clean}")
+                results["confidence_score"] += 0.1
         
-        # Try to get date from metadata
-        if meta and hasattr(meta, 'creation_date') and meta.creation_date:
-            results["purchase_date"] = str(meta.creation_date)
-            results["confidence_score"] += 0.1
-            if debug:
-                print(f"✓ Date from metadata: {meta.creation_date}")
-        
-        # STEP 2: Extract text with per-page error handling
+        # STEP 2: Raw Text Extraction
         text = ""
         for i, page in enumerate(reader.pages):
             try:
                 page_text = page.extract_text()
-                if page_text and page_text.strip():
+                if page_text:
                     text += page_text + "\n"
-                elif debug:
-                    print(f"Warning: Page {i+1} has no text content")
             except Exception as e:
-                if debug:
-                    print(f"Warning: Could not extract text from page {i+1}: {e}")
-                # Continue to next page instead of failing
+                if debug: print(f"Page {i} error: {e}")
                 continue
         
+        results["raw_text"] = text
         if not text.strip():
-            if debug:
-                print("ERROR: No text could be extracted from any page")
             return results
-        
-        # STEP 3: Preprocess text for better matching
-        # Normalize line endings and whitespace
-        text = text.replace('\r\n', '\n')
-        text = re.sub(r'\n+', '\n', text)  # Remove multiple newlines
-        text = re.sub(r' +', ' ', text)    # Remove multiple spaces
-        
-        if debug:
-            print(f"\n--- Extracted Text (first 500 chars) ---")
-            print(text[:500])
-            print(f"... (total {len(text)} characters)")
-        
-        
-        # STEP 4: Extract Total Cost (Highest priority)
-        if debug:
-            print(f"\n--- Searching for Total Cost ---")
-        
-        # Look for "Total: $1,234.56" or "Amount: 1234.56"
+            
+        # STEP 3: Reference Numbers (PO / Invoice)
+        po_match = re.search(r"(?:PO|P\.O\.|Purchase Order)\s*(?:Number|#|No\.?)?[:\s]*([A-Z0-9\-]{5,20})", text, re.I)
+        if po_match:
+            results["po_number"] = po_match.group(1).strip()
+            results["confidence_score"] += 0.2
+            
+        inv_match = re.search(r"(?:Invoice|Inv)\s*(?:Number|#|No\.?)?[:\s]*([A-Z0-9\-]{5,20})", text, re.I)
+        if inv_match:
+            results["invoice_number"] = inv_match.group(1).strip()
+            results["confidence_score"] += 0.2
+
+        # STEP 4: Financial Deep Dive
+        # Total Cost
         total_patterns = [
-            r"(?:Total|Grand Total|Amount Due|Net Amount|Final Amount)[\s:]*[\$€£₹]?\s*([\d,]+\.?\d{0,2})",
-            r"(?:TOTAL|AMOUNT)[\s:]*[\$€£₹]?\s*([\d,]+\.?\d{0,2})",
-            r"[\$€£₹]\s*([\d,]+\.\d{2})"  # Just a currency sign followed by number
+            r"\b(?:Total|Grand Total|Amount Due)[\s:]*[\$€£₹¥]?\s*([\d,]+\.\d{2})",
+            r"\b(?:TOTAL|AMOUNT)[\s:]*[\$€£₹¥]?\s*([\d,]+\.\d{2})"
         ]
         for pattern in total_patterns:
-            match = re.search(pattern, text, re.I | re.MULTILINE)
+            match = re.search(pattern, text, re.I)
             if match:
-                try:
-                    results["total_cost"] = float(match.group(1).replace(',', ''))
-                    results["confidence_score"] += 0.4
-                    if debug:
-                        print(f"✓ Total cost found: {results['total_cost']} (pattern: {pattern[:50]}...)")
-                    break
-                except:
-                    continue
+                results["total_cost"] = float(match.group(1).replace(',', ''))
+                results["confidence_score"] += 0.3
+                break
 
-        if debug:
-            print(f"\n--- Searching for Product Details ---")
-            
-        product_patterns = [
-            r"(?:Description|Item|Product|Service)[\s:]*[\n]?\s*([A-Za-z0-9\s\.,\-&]{5,100})",
-            r"(?:PART NO|MODEL)[\s:]*([A-Za-z0-9\s\.\-]+)",
-            r"([0-9]{1,2}\s*[xX]\s*[A-Za-z0-9\s\.,\-&]{5,50})" # e.g. "1 x HP Laptop"
-        ]
+        # Subtotal, Tax, Shipping
+        sub_match = re.search(r"\b(?:Subtotal|Sub-Total)[\s:]*[\$€£₹¥]?\s*([\d,]+\.\d{2})", text, re.I)
+        if sub_match: results["subtotal"] = float(sub_match.group(1).replace(',', ''))
         
-        for pattern in product_patterns:
-            match = re.search(pattern, text, re.I | re.MULTILINE)
-            if match:
-                cleaned = match.group(1).strip()
-                if len(cleaned) > 5 and cleaned.lower() not in ['description', 'details', 'shipping']:
-                     results["product_details"] = cleaned
-                     results["confidence_score"] += 0.2
-                     if debug:
-                         print(f"✓ Product found: {cleaned}")
-                     break
+        tax_match = re.search(r"\b(?:Tax|VAT|GST|Sales Tax)[\s:]*[\$€£₹¥]?\s*([\d,]+\.\d{2})", text, re.I)
+        if tax_match: results["tax_amount"] = float(tax_match.group(1).replace(',', ''))
+        
+        ship_match = re.search(r"\b(?:Shipping|Freight|Delivery)[\s:]*[\$€£₹¥]?\s*([\d,]+\.\d{2})", text, re.I)
+        if ship_match: results["shipping_cost"] = float(ship_match.group(1).replace(',', ''))
 
-        # STEP 5: Extract Vendor Name with improved multi-line support
-        if debug:
-            print(f"\n--- Searching for Vendor Name ---")
+
+        # Currency Detection
+        if "$" in text: results["currency"] = "USD"
+        elif "€" in text: results["currency"] = "EUR"
+        elif "₹" in text: results["currency"] = "INR"
+        elif "£" in text: results["currency"] = "GBP"
+
+        # STEP 5: Line Item Parsing (Table Logic)
+        # Look for rows like: [Description] [Quantity] [Unit Price] [Total]
+        # Common pattern: Text followed by Numbers
+        lines = text.split('\n')
+        for line in lines:
+            # Enhanced line item regex: desc, qty, price, total
+            # Matches: Laptop 5 1200.00 6000.00
+            item_match = re.search(r"^([A-Z][A-Za-z0-9\s\.\-]{5,50})\s+(\d+)\s+([\d,]+\.\d{2})\s+([\d,]+\.\d{2})", line.strip())
+            if item_match:
+                results["product_details"].append({
+                    "description": item_match.group(1).strip(),
+                    "quantity": int(item_match.group(2)),
+                    "unit_price": float(item_match.group(3).replace(',', '')),
+                    "total": float(item_match.group(4).replace(',', ''))
+                })
         
-        # Look for vendor in text content (if not found in metadata)
+        # If no line items found, fallback to summary
+        if not results["product_details"]:
+            results["product_details"] = ["Generated from deep extraction summary"]
+
+        # STEP 6: Vendor Name (Text-based)
         if results["vendor_name"] == "Unknown Vendor":
             vendor_patterns = [
-                # Multi-line pattern: "Vendor:" on one line, name on next
-                r"(?:Vendor|Seller|Supplier)[\s:]*\n\s*([A-Za-z0-9\s\.,\-&]+?)(?:\n|$)",
-                # Standard pattern: "Vendor: Name" on same line
-                r"(?:Vendor|Seller|Supplier|From)[\s:]+([A-Za-z0-9\s\.,\-&]+?)(?:\n|$)",
-                # "Sold By" pattern
-                r"Sold By[\s:]+([A-Za-z0-9\s\.,\-&]+)",
-                # "To:" pattern (buyer/seller inversion)
-                r"To:[\s]+([A-Za-z0-9\s\.,\-&]+)"
+                r"(?:Vendor|Seller|Supplier|From)[\s:]+([A-Za-z0-9\s\.,\-&]{3,50})",
+                r"Sold By[\s:]+([A-Za-z0-9\s\.,\-&]{3,50})"
             ]
-            
-            for i, pattern in enumerate(vendor_patterns):
-                match = re.search(pattern, text, re.I | re.MULTILINE)
+            for pattern in vendor_patterns:
+                match = re.search(pattern, text, re.I)
                 if match:
-                    cleaned = match.group(1).strip()
-                    # Validation: Ignore generic labels captured by mistake
-                    if len(cleaned) > 2 and cleaned.lower() not in ['details', 'name', 'address', 'signature', 'date', 'invoice']: 
-                        results["vendor_name"] = cleaned
-                        results["confidence_score"] += 0.3
-                        if debug:
-                            print(f"✓ Vendor found: {cleaned} (pattern #{i+1})")
-                        break
-                    elif debug:
-                        print(f"  Pattern #{i+1} matched '{cleaned}' but rejected (generic term)")
+                    results["vendor_name"] = match.group(1).strip()
+                    results["confidence_score"] += 0.2
+                    break
 
-
-        # STEP 6: Fallback cost extraction if primary patterns failed
-        if results["total_cost"] == 0.0:
-            if debug:
-                print(f"\n--- Using Fallback: Largest Number Heuristic ---")
-            
-            # Find the largest number in the document that looks like currency
-            all_numbers = re.findall(r"(?:[\$€£₹]|\b)([\d,]+\.\d{2})(\b|\s)", text)
-            if not all_numbers:
-                 # Try integers or looser floats
-                 all_numbers = re.findall(r"\b(\d{1,3}(?:,\d{3})*(?:\.\d+)?)", text)
-            
-            if debug and all_numbers:
-                print(f"  Found {len(all_numbers)} number candidates")
-            
-            max_val = 0.0
-            for num_str in all_numbers:
-                if isinstance(num_str, tuple): num_str = num_str[0]
-                try:
-                    val = float(num_str.replace(',', ''))
-                    # Filter out likely years/phone numbers/IDs (heuristic constraints)
-                    if 10.0 < val < 1000000.0 and val != 2026: 
-                        if val > max_val:
-                            max_val = val
-                except:
-                    continue
-            
-            if max_val > 0:
-                results["total_cost"] = max_val
-                results["confidence_score"] += 0.2  # Lower confidence
-                if debug:
-                    print(f"✓ Fallback cost found: {max_val} (low confidence)")
-            elif debug:
-                print(f"  No valid numbers found in fallback")
-        
-        # STEP 7: Extract Quantity
-        if debug:
-            print(f"\n--- Searching for Quantity ---")
-        
-        qty_match = re.search(r"(?:Qty|Quantity|Units)[\s:]*(\d+)", text, re.I)
-        if qty_match:
-            results["quantity"] = int(qty_match.group(1))
+        # STEP 7: Date Extraction
+        date_match = re.search(r"(?:Date|Issued)[\s:]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+ \d{1,2},? \d{4})", text, re.I)
+        if date_match:
+            results["purchase_date"] = date_match.group(1)
             results["confidence_score"] += 0.1
-            if debug:
-                print(f"✓ Quantity found: {results['quantity']}")
-
-        # STEP 8: Extract Date (if not found in metadata)
-        if not results["purchase_date"]:
-            if debug:
-                print(f"\n--- Searching for Date ---")
-            
-            date_match = re.search(r"(?:Date|Issued)[\s:]*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\w+ \d{1,2},? \d{4})", text, re.I)
-            if date_match:
-                results["purchase_date"] = date_match.group(1)
-                results["confidence_score"] += 0.2
-                if debug:
-                    print(f"✓ Date found: {results['purchase_date']}")
-
-        # STEP 9: Calculate Unit Price if missing
-        if results["total_cost"] > 0 and results["quantity"] > 0:
-            results["unit_price"] = round(results["total_cost"] / results["quantity"], 2)
-        
-        if debug:
-            print(f"\n{'='*80}")
-            print(f"EXTRACTION RESULTS:")
-            print(f"{'='*80}")
-            print(f"Vendor Name: {results['vendor_name']}")
-            print(f"Total Cost: {results['total_cost']}")
-            print(f"Quantity: {results['quantity']}")
-            print(f"Unit Price: {results['unit_price']}")
-            print(f"Purchase Date: {results['purchase_date']}")
-            print(f"Confidence Score: {results['confidence_score']:.2f}")
-            print(f"{'='*80}\n")
 
     except Exception as e:
-        error_msg = f"PDF Extraction Error: {str(e)}"
-        print(error_msg)
-        
-        if debug:
-            print(f"\n{'='*80}")
-            print("FULL ERROR TRACEBACK:")
-            print(f"{'='*80}")
-            traceback.print_exc()
-            print(f"{'='*80}\n")
-        
-        # In case of encrypted or malformed PDF, return defaults with 0 confidence
         results["error"] = str(e)
+        if debug: traceback.print_exc()
         
     return results
 
