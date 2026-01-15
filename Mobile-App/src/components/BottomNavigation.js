@@ -72,7 +72,6 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
   },
   labelActive: {
-    color: Colors.orange || Colors.primary,
     fontWeight: '600',
   },
 });
